@@ -1,5 +1,3 @@
-
-
 'use client'
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -8,11 +6,14 @@ export default function Home() {
   const router = useRouter()
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      router.push('/dashboard')
-    } else {
-      router.push('/auth')
+    // Check if user is logged in
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token')
+      if (token) {
+        router.push('/dashboard')
+      } else {
+        router.push('/auth')
+      }
     }
   }, [router])
 
