@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ApiService } from '../../lib/api'
 
-// Add the function directly here as backup
+// Add the function directly here
 const formatPhoneToStandard = (phone) => {
   if (!phone) return '';
   let cleanPhone = phone.replace(/\D/g, '');
@@ -29,13 +29,18 @@ export default function AuthPage() {
   })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ text: '', type: '' })
+  const [mounted, setMounted] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
+    setMounted(true)
+    
+    // Only run authentication check after component mounts on client
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('token')
       if (token) {
         router.push('/dashboard')
+        return
       }
 
       const savedLanguage = localStorage.getItem('preferredLanguage')
@@ -150,6 +155,17 @@ export default function AuthPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Don't render until mounted to avoid hydration issues
+  if (!mounted) {
+    return (
+      <div className="auth-container">
+        <div className="loading">
+          <div className="spinner"></div>
+        </div>
+      </div>
+    )
   }
 
   return (
