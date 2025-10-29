@@ -25,8 +25,14 @@ export default function AuthPage() {
     
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('token')
-      if (token) {
-        router.push('/dashboard')
+      const userRole = localStorage.getItem('userRole')
+      
+      if (token && userRole) {
+        if (userRole === 'employer') {
+          router.push('/employer')
+        } else {
+          router.push('/dashboard')
+        }
         return
       }
 
@@ -80,7 +86,13 @@ export default function AuthPage() {
           'success'
         )
         
-        setTimeout(() => router.push('/dashboard'), 1000)
+        setTimeout(() => {
+          if (response.user.role === 'employer') {
+            router.push('/employer')
+          } else {
+            router.push('/dashboard')
+          }
+        }, 1000)
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -131,7 +143,13 @@ export default function AuthPage() {
           'success'
         )
         
-        setTimeout(() => router.push('/dashboard'), 1000)
+        setTimeout(() => {
+          if (registerRole === 'employer') {
+            router.push('/employer')
+          } else {
+            router.push('/dashboard')
+          }
+        }, 1000)
       }
     } catch (error) {
       console.error('Registration error:', error);
@@ -151,7 +169,9 @@ export default function AuthPage() {
       <div className="auth-container">
         <div className="loading">
           <div className="spinner"></div>
-          <p style={{ marginTop: '16px', color: '#666' }}>Inapakia...</p>
+          <p style={{ marginTop: '16px', color: '#666' }}>
+            {currentLanguage === 'en' ? 'Loading...' : 'Inapakia...'}
+          </p>
         </div>
       </div>
     )
@@ -162,17 +182,6 @@ export default function AuthPage() {
       {/* Language Switcher */}
       <div 
         className="language-switcher"
-        style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-          background: 'white',
-          padding: '10px 20px',
-          borderRadius: '25px',
-          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-          cursor: 'pointer',
-          zIndex: 100
-        }}
         onClick={toggleLanguage}
       >
         <span style={{ fontWeight: '600' }}>
@@ -183,7 +192,12 @@ export default function AuthPage() {
       <div className="auth-card">
         <div className="auth-header">
           <h1>Kazi Mashinani</h1>
-          <p>Kuunganisha Watalanta Vijijini na Fursa</p>
+          <p>
+            {currentLanguage === 'en' 
+              ? 'Connecting Rural Talent with Opportunities' 
+              : 'Kuunganisha Watalanta Vijijini na Fursa'
+            }
+          </p>
         </div>
         
         <div className="auth-tabs">
@@ -209,17 +223,10 @@ export default function AuthPage() {
           )}
 
           {/* Test Credentials Info */}
-          <div style={{ 
-            background: '#e3f2fd', 
-            padding: '12px', 
-            borderRadius: '8px', 
-            marginBottom: '16px',
-            fontSize: '0.85rem',
-            border: '1px solid #bbdefb'
-          }}>
-            <strong>Test Account:</strong><br/>
-            Nambari: <strong>0712345678</strong><br/>
-            Nenosiri: <strong>password123</strong>
+          <div className="test-credentials">
+            <strong>{currentLanguage === 'en' ? 'Test Accounts:' : 'Akaunti za Kujaribu:'}</strong><br/>
+            • {currentLanguage === 'en' ? 'Employee' : 'Mfanyakazi'}: <strong>0712345678</strong> / <strong>password123</strong><br/>
+            • {currentLanguage === 'en' ? 'Employer' : 'Mwajiri'}: <strong>0734567890</strong> / <strong>password123</strong>
           </div>
 
           {activeTab === 'login' && (
@@ -256,8 +263,8 @@ export default function AuthPage() {
                 className="btn btn-primary btn-block"
               >
                 {loading ? (
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="spinner" style={{ width: '16px', height: '16px', borderWidth: '2px', marginRight: '8px' }}></div>
+                  <span className="loading-button">
+                    <div className="spinner-small"></div>
                     {currentLanguage === 'en' ? 'Logging in...' : 'Inaingia...'}
                   </span>
                 ) : (
@@ -345,8 +352,8 @@ export default function AuthPage() {
                 className="btn btn-primary btn-block"
               >
                 {loading ? (
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="spinner" style={{ width: '16px', height: '16px', borderWidth: '2px', marginRight: '8px' }}></div>
+                  <span className="loading-button">
+                    <div className="spinner-small"></div>
                     {currentLanguage === 'en' ? 'Creating account...' : 'Inaunda akaunti...'}
                   </span>
                 ) : (
