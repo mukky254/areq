@@ -1,17 +1,23 @@
+import { Inter } from 'next/font/google'
 import './globals.css'
 
+const inter = Inter({ subsets: ['latin'] })
+
 export const metadata = {
-  title: 'Kazi Mashinani - Kuunganisha Watalanta Vijijini na Fursa',
-  description: 'Platform ya kuunganisha watafuta kazi na waajiri katika maeneo ya vijijini',
+  title: 'Kazi Mashinani',
+  description: 'Connecting Rural Talent with Opportunities',
 }
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="sw">
+    <html lang="en">
       <head>
-        <link rel="icon" href="/favicon.ico" />
+        <link 
+          rel="stylesheet" 
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" 
+        />
       </head>
-      <body>
+      <body className={inter.className}>
         {children}
       </body>
     </html>
