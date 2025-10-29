@@ -1,7 +1,19 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ApiService, formatPhoneToStandard } from '../../lib/api'
+import { ApiService } from '../../lib/api'
+
+// Add the function directly here as backup
+const formatPhoneToStandard = (phone) => {
+  if (!phone) return '';
+  let cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone.startsWith('0')) {
+    cleanPhone = '254' + cleanPhone.substring(1);
+  } else if (!cleanPhone.startsWith('254')) {
+    cleanPhone = '254' + cleanPhone;
+  }
+  return cleanPhone;
+};
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState('login')
