@@ -62,47 +62,59 @@ function appReducer(state, action) {
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(appReducer, initialState)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    // Check authentication on mount
-    const token = localStorage.getItem('token')
-    const user = localStorage.getItem('user')
-    const userRole = localStorage.getItem('userRole')
-    const language = localStorage.getItem('preferredLanguage')
-    const darkMode = localStorage.getItem('darkMode') === 'true'
+    setMounted(true)
+    
+    // Only run on client side
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token')
+      const user = localStorage.getItem('user')
+      const userRole = localStorage.getItem('userRole')
+      const language = localStorage.getItem('preferredLanguage')
+      const darkMode = localStorage.getItem('darkMode') === 'true'
 
-    if (token && user) {
-      dispatch({ 
-        type: 'SET_USER', 
-        payload: { 
-          user: JSON.parse(user), 
-          token, 
-          userRole 
-        } 
-      })
-    }
+      if (token && user) {
+        try {
+          dispatch({ 
+            type: 'SET_USER', 
+            payload: { 
+              user: JSON.parse(user), 
+              token, 
+              userRole 
+            } 
+          })
+        } catch (error) {
+          console.error('Error parsing user data:', error)
+        }
+      }
 
-    if (language) {
-      dispatch({ type: 'SET_LANGUAGE', payload: language })
-    }
+      if (language) {
+        dispatch({ type: 'SET_LANGUAGE', payload: language })
+      }
 
-    if (darkMode) {
-      dispatch({ type: 'TOGGLE_DARK_MODE' })
+      if (darkMode) {
+        dispatch({ type: 'TOGGLE_DARK_MODE' })
+      }
     }
   }, [])
 
   useEffect(() => {
-    // Apply dark mode to body
-    if (state.darkMode) {
-      document.body.classList.add('dark-mode')
-    } else {
-      document.body.classList.remove('dark-mode')
+    // Only apply dark mode on client side
+    if (mounted && typeof document !== 'undefined') {
+      if (state.darkMode) {
+        document.body.classList.add('dark-mode')
+      } else {
+        document.body.classList.remove('dark-mode')
+      }
     }
-  }, [state.darkMode])
+  }, [state.darkMode, mounted])
 
   const value = {
     ...state,
-    dispatch
+    dispatch,
+    mounted
   }
 
   return (
