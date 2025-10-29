@@ -9,18 +9,22 @@ export default function Home() {
   useEffect(() => {
     setMounted(true)
     
-    // Only run this on client side after component mounts
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('token')
-      if (token) {
-        router.push('/dashboard')
+      const userRole = localStorage.getItem('userRole')
+      
+      if (token && userRole) {
+        if (userRole === 'employer') {
+          router.push('/employer')
+        } else {
+          router.push('/dashboard')
+        }
       } else {
         router.push('/auth')
       }
     }
   }, [router])
 
-  // Don't render anything until mounted on client
   if (!mounted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50">
