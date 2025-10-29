@@ -1,8 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ApiService } from '../../lib/api'
-import { formatPhoneToStandard } from '../../lib/utils' // Make sure this import is correct
+import { SimpleAuth } from '../../lib/simpleAuth'
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState('login')
@@ -18,39 +17,19 @@ export default function AuthPage() {
   })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ text: '', type: '' })
-  const [mounted, setMounted] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
-    setMounted(true)
-    
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('token')
-      if (token) {
-        router.push('/dashboard')
-      }
+    const token = localStorage.getItem('token')
+    if (token) {
+      router.push('/dashboard')
+    }
 
-      const savedLanguage = localStorage.getItem('preferredLanguage')
-      if (savedLanguage) {
-        setCurrentLanguage(savedLanguage)
-      }
+    const savedLanguage = localStorage.getItem('preferredLanguage')
+    if (savedLanguage) {
+      setCurrentLanguage(savedLanguage)
     }
   }, [router])
-
-  // Add the function directly here as a backup
-  const formatPhone = (phone) => {
-    if (!phone) return '';
-    
-    let cleanPhone = phone.replace(/\D/g, '');
-    
-    if (cleanPhone.startsWith('0')) {
-      cleanPhone = '254' + cleanPhone.substring(1);
-    } else if (!cleanPhone.startsWith('254')) {
-      cleanPhone = '254' + cleanPhone;
-    }
-    
-    return cleanPhone;
-  }
 
   const toggleLanguage = () => {
     const newLanguage = currentLanguage === 'en' ? 'sw' : 'en'
@@ -68,11 +47,11 @@ export default function AuthPage() {
   }
 
   const handleLogin = async () => {
-    if (!formData.loginPhone || !formData.loginPassword) {
+    if (!formData.loginPhone) {
       showMessage(
         currentLanguage === 'en' 
-          ? 'Please enter both phone number and password' 
-          : 'Tafadhali weka nambari ya simu na nenosiri',
+          ? 'Please enter phone number' 
+          : 'Tafadhali weka nambari ya simu',
         'error'
       )
       return
@@ -80,9 +59,7 @@ export default function AuthPage() {
 
     setLoading(true)
     try {
-      // Use the local function as backup
-      const formattedPhone = formatPhone(formData.loginPhone)
-      const response = await ApiService.login(formattedPhone, formData.loginPassword)
+      const response = await SimpleAuth.login(formData.loginPhone, formData.loginPassword)
 
       if (response.success) {
         localStorage.setItem('token', response.token)
@@ -98,9 +75,9 @@ export default function AuthPage() {
       }
     } catch (error) {
       showMessage(
-        error.message || (currentLanguage === 'en' 
-          ? 'Login failed. Please check your credentials.' 
-          : 'Imeshindwa kuingia. Tafadhali angalia maelezo yako.'),
+        currentLanguage === 'en' 
+          ? 'Login failed. Please try again.' 
+          : 'Imeshindwa kuingia. Tafadhali jaribu tena.',
         'error'
       )
     } finally {
@@ -111,7 +88,7 @@ export default function AuthPage() {
   const handleRegistration = async () => {
     const { registerName, registerPhone, registerLocation, registerPassword, registerRole } = formData
     
-    if (!registerName || !registerPhone || !registerPassword || !registerLocation) {
+    if (!registerName || !registerPhone || !registerLocation) {
       showMessage(
         currentLanguage === 'en' 
           ? 'Please fill in all required fields' 
@@ -123,11 +100,9 @@ export default function AuthPage() {
 
     setLoading(true)
     try {
-      // Use the local function as backup
-      const formattedPhone = formatPhone(registerPhone)
-      const response = await ApiService.register({
+      const response = await SimpleAuth.register({
         name: registerName,
-        phone: formattedPhone,
+        phone: registerPhone,
         password: registerPassword,
         role: registerRole,
         location: registerLocation
@@ -147,25 +122,14 @@ export default function AuthPage() {
       }
     } catch (error) {
       showMessage(
-        error.message || (currentLanguage === 'en' 
+        currentLanguage === 'en' 
           ? 'Registration failed. Please try again.' 
-          : 'Usajili umeshindwa. Tafadhali jaribu tena.'),
+          : 'Usajili umeshindwa. Tafadhali jaribu tena.',
         'error'
       )
     } finally {
       setLoading(false)
     }
-  }
-
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center p-4">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -181,144 +145,119 @@ export default function AuthPage() {
       
       <div className="auth-container">
         <div className="auth-header">
-          <h1 data-en="Kazi Mashinani" data-sw="Kazi Mashinani">Kazi Mashinani</h1>
-          <p data-en="Connecting Rural Talent with Opportunities" data-sw="Kuunganisha Watalanta Vijijini na Fursa">Kuunganisha Watalanta Vijijini na Fursa</p>
+          <h1>Kazi Mashinani</h1>
+          <p>Kuunganisha Watalanta Vijijini na Fursa</p>
         </div>
         
         <div className="auth-tabs">
           <div className={`auth-tab ${activeTab === 'login' ? 'active' : ''}`} onClick={() => setActiveTab('login')}>
-            <span data-en="Login" data-sw="Ingia">Ingia</span>
+            <span>Ingia</span>
           </div>
           <div className={`auth-tab ${activeTab === 'register' ? 'active' : ''}`} onClick={() => setActiveTab('register')}>
-            <span data-en="Register" data-sw="Jisajili">Jisajili</span>
+            <span>Jisajili</span>
           </div>
         </div>
         
         <div className="auth-content">
-          {/* Login Form */}
-          <div className={`auth-form ${activeTab === 'login' ? 'active' : ''}`} id="loginForm">
-            {message.text && (
-              <div className={`message ${message.type}`} style={{display: 'block'}}>
-                {message.text}
+          {message.text && (
+            <div className={`message ${message.type}`} style={{display: 'block'}}>
+              {message.text}
+            </div>
+          )}
+
+          {activeTab === 'login' && (
+            <div className="auth-form active">
+              <div className="form-group">
+                <label>Nambari ya Simu</label>
+                <input
+                  type="tel"
+                  value={formData.loginPhone}
+                  onChange={(e) => handleInputChange('loginPhone', e.target.value)}
+                  className="form-control"
+                  placeholder="07XXXXXXXX"
+                />
               </div>
-            )}
-            
-            <div className="form-group">
-              <label htmlFor="loginPhone" data-en="Phone Number" data-sw="Nambari ya Simu">Nambari ya Simu</label>
-              <input 
-                type="tel" 
-                id="loginPhone" 
-                className="form-control" 
-                placeholder="07XXXXXXXX"
-                value={formData.loginPhone}
-                onChange={(e) => handleInputChange('loginPhone', e.target.value)}
-              />
+              
+              <div className="form-group">
+                <label>Nenosiri</label>
+                <input
+                  type="password"
+                  value={formData.loginPassword}
+                  onChange={(e) => handleInputChange('loginPassword', e.target.value)}
+                  className="form-control"
+                  placeholder="Weka nenosiri lako"
+                />
+              </div>
+              
+              <button className="btn" onClick={handleLogin} disabled={loading}>
+                {loading ? 'Inaingia...' : 'Ingia'}
+              </button>
             </div>
-            
-            <div className="form-group">
-              <label htmlFor="loginPassword" data-en="Password" data-sw="Nenosiri">Nenosiri</label>
-              <input 
-                type="password" 
-                id="loginPassword" 
-                className="form-control" 
-                placeholder={currentLanguage === 'en' ? 'Enter your password' : 'Weka nenosiri lako'}
-                value={formData.loginPassword}
-                onChange={(e) => handleInputChange('loginPassword', e.target.value)}
-              />
-            </div>
-            
-            <button className="btn" onClick={handleLogin} disabled={loading}>
-              {loading ? (
-                <span>
-                  <i className="fas fa-spinner fa-spin"></i> {currentLanguage === 'en' ? 'Logging in...' : 'Inaingia...'}
-                </span>
-              ) : (
-                <span data-en="Login" data-sw="Ingia">Ingia</span>
-              )}
-            </button>
-          </div>
+          )}
           
-          {/* Registration Form */}
-          <div className={`auth-form ${activeTab === 'register' ? 'active' : ''}`} id="registerForm">
-            {message.text && (
-              <div className={`message ${message.type}`} style={{display: 'block'}}>
-                {message.text}
+          {activeTab === 'register' && (
+            <div className="auth-form active">
+              <div className="form-group">
+                <label>Jina Kamili</label>
+                <input
+                  type="text"
+                  value={formData.registerName}
+                  onChange={(e) => handleInputChange('registerName', e.target.value)}
+                  className="form-control"
+                  placeholder="Weka jina lako kamili"
+                />
               </div>
-            )}
-            
-            <div className="form-group">
-              <label htmlFor="registerName" data-en="Full Name" data-sw="Jina Kamili">Jina Kamili</label>
-              <input 
-                type="text" 
-                id="registerName" 
-                className="form-control" 
-                placeholder={currentLanguage === 'en' ? 'Enter your full name' : 'Weka jina lako kamili'}
-                value={formData.registerName}
-                onChange={(e) => handleInputChange('registerName', e.target.value)}
-              />
+              
+              <div className="form-group">
+                <label>Nambari ya Simu</label>
+                <input
+                  type="tel"
+                  value={formData.registerPhone}
+                  onChange={(e) => handleInputChange('registerPhone', e.target.value)}
+                  className="form-control"
+                  placeholder="07XXXXXXXX"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Mahali Unapoishi</label>
+                <input
+                  type="text"
+                  value={formData.registerLocation}
+                  onChange={(e) => handleInputChange('registerLocation', e.target.value)}
+                  className="form-control"
+                  placeholder="Weka eneo lako"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Nenosiri</label>
+                <input
+                  type="password"
+                  value={formData.registerPassword}
+                  onChange={(e) => handleInputChange('registerPassword', e.target.value)}
+                  className="form-control"
+                  placeholder="Tengeneza nenosiri"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Mimi ni</label>
+                <select
+                  value={formData.registerRole}
+                  onChange={(e) => handleInputChange('registerRole', e.target.value)}
+                  className="form-control"
+                >
+                  <option value="employee">Mtafuta Kazi</option>
+                  <option value="employer">Mwajiri</option>
+                </select>
+              </div>
+              
+              <button className="btn" onClick={handleRegistration} disabled={loading}>
+                {loading ? 'Inaunda akaunti...' : 'Jisajili'}
+              </button>
             </div>
-            
-            <div className="form-group">
-              <label htmlFor="registerPhone" data-en="Phone Number" data-sw="Nambari ya Simu">Nambari ya Simu</label>
-              <input 
-                type="tel" 
-                id="registerPhone" 
-                className="form-control" 
-                placeholder="07XXXXXXXX"
-                value={formData.registerPhone}
-                onChange={(e) => handleInputChange('registerPhone', e.target.value)}
-                required
-              />
-            </div>
-            
-            <div className="form-group">
-              <label htmlFor="registerLocation" data-en="Enter Location" data-sw="Mahali Unapoishi">Mahali Unapoishi</label>
-              <input 
-                type="text" 
-                id="registerLocation" 
-                className="form-control" 
-                placeholder={currentLanguage === 'en' ? 'Enter your location' : 'Weka eneo lako'}
-                value={formData.registerLocation}
-                onChange={(e) => handleInputChange('registerLocation', e.target.value)}
-                required
-              />
-            </div>
-            
-            <div className="form-group">
-              <label htmlFor="registerPassword" data-en="Password" data-sw="Nenosiri">Nenosiri</label>
-              <input 
-                type="password" 
-                id="registerPassword" 
-                className="form-control" 
-                placeholder={currentLanguage === 'en' ? 'Create a password' : 'Tengeneza nenosiri'}
-                value={formData.registerPassword}
-                onChange={(e) => handleInputChange('registerPassword', e.target.value)}
-              />
-            </div>
-            
-            <div className="form-group">
-              <label htmlFor="registerRole" data-en="I am a" data-sw="Mimi ni">Mimi ni</label>
-              <select 
-                id="registerRole" 
-                className="form-control"
-                value={formData.registerRole}
-                onChange={(e) => handleInputChange('registerRole', e.target.value)}
-              >
-                <option value="employee" data-en="Job Seeker" data-sw="Mtafuta Kazi">Mtafuta Kazi</option>
-                <option value="employer" data-en="Employer" data-sw="Mwajiri">Mwajiri</option>
-              </select>
-            </div>
-            
-            <button className="btn" onClick={handleRegistration} disabled={loading}>
-              {loading ? (
-                <span>
-                  <i className="fas fa-spinner fa-spin"></i> {currentLanguage === 'en' ? 'Creating account...' : 'Inaunda akaunti...'}
-                </span>
-              ) : (
-                <span data-en="Register" data-sw="Jisajili">Jisajili</span>
-              )}
-            </button>
-          </div>
+          )}
         </div>
       </div>
 
