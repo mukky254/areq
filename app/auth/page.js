@@ -1,8 +1,6 @@
-
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { SimpleAuth } from '../../lib/simpleAuth'
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState('login')
@@ -21,14 +19,16 @@ export default function AuthPage() {
   const router = useRouter()
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      router.push('/dashboard')
-    }
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token')
+      if (token) {
+        router.push('/dashboard')
+      }
 
-    const savedLanguage = localStorage.getItem('preferredLanguage')
-    if (savedLanguage) {
-      setCurrentLanguage(savedLanguage)
+      const savedLanguage = localStorage.getItem('preferredLanguage')
+      if (savedLanguage) {
+        setCurrentLanguage(savedLanguage)
+      }
     }
   }, [router])
 
@@ -47,6 +47,17 @@ export default function AuthPage() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  const formatPhoneToStandard = (phone) => {
+    if (!phone) return '';
+    let cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '254' + cleanPhone.substring(1);
+    } else if (!cleanPhone.startsWith('254')) {
+      cleanPhone = '254' + cleanPhone;
+    }
+    return cleanPhone;
+  }
+
   const handleLogin = async () => {
     if (!formData.loginPhone) {
       showMessage(
@@ -60,20 +71,25 @@ export default function AuthPage() {
 
     setLoading(true)
     try {
-      const response = await SimpleAuth.login(formData.loginPhone, formData.loginPassword)
-
-      if (response.success) {
-        localStorage.setItem('token', response.token)
-        localStorage.setItem('user', JSON.stringify(response.user))
-        localStorage.setItem('userRole', response.user.role)
-        
-        showMessage(
-          currentLanguage === 'en' ? 'Login successful!' : 'Umefanikiwa kuingia!',
-          'success'
-        )
-        
-        setTimeout(() => router.push('/dashboard'), 1000)
+      // Demo login - works without backend
+      const demoUser = {
+        _id: '1',
+        name: 'Demo User',
+        phone: formatPhoneToStandard(formData.loginPhone),
+        location: 'Nairobi',
+        role: 'employee'
       }
+
+      localStorage.setItem('token', 'demo-token-' + Date.now())
+      localStorage.setItem('user', JSON.stringify(demoUser))
+      localStorage.setItem('userRole', 'employee')
+      
+      showMessage(
+        currentLanguage === 'en' ? 'Login successful!' : 'Umefanikiwa kuingia!',
+        'success'
+      )
+      
+      setTimeout(() => router.push('/dashboard'), 1000)
     } catch (error) {
       showMessage(
         currentLanguage === 'en' 
@@ -101,26 +117,25 @@ export default function AuthPage() {
 
     setLoading(true)
     try {
-      const response = await SimpleAuth.register({
+      // Demo registration - works without backend
+      const newUser = {
+        _id: 'user-' + Date.now(),
         name: registerName,
-        phone: registerPhone,
-        password: registerPassword,
-        role: registerRole,
-        location: registerLocation
-      })
-
-      if (response.success) {
-        localStorage.setItem('token', response.token)
-        localStorage.setItem('user', JSON.stringify(response.user))
-        localStorage.setItem('userRole', response.user.role)
-        
-        showMessage(
-          currentLanguage === 'en' ? 'Account created!' : 'Akaunti imeundwa!',
-          'success'
-        )
-        
-        setTimeout(() => router.push('/dashboard'), 1000)
+        phone: formatPhoneToStandard(registerPhone),
+        location: registerLocation,
+        role: registerRole
       }
+
+      localStorage.setItem('token', 'demo-token-' + Date.now())
+      localStorage.setItem('user', JSON.stringify(newUser))
+      localStorage.setItem('userRole', registerRole)
+      
+      showMessage(
+        currentLanguage === 'en' ? 'Account created!' : 'Akaunti imeundwa!',
+        'success'
+      )
+      
+      setTimeout(() => router.push('/dashboard'), 1000)
     } catch (error) {
       showMessage(
         currentLanguage === 'en' 
@@ -137,307 +152,199 @@ export default function AuthPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center p-4">
       {/* Language Switcher */}
       <div 
-        className="language-switcher"
+        className="fixed top-4 right-4 flex items-center gap-2 bg-white p-3 rounded-full shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
         onClick={toggleLanguage}
       >
-        <span id="currentFlag">{currentLanguage === 'en' ? '🇺🇸' : '🇰🇪'}</span>
-        <span id="currentLanguage">{currentLanguage === 'en' ? 'English' : 'Kiswahili'}</span>
+        <span className="text-lg">{currentLanguage === 'en' ? '🇺🇸' : '🇰🇪'}</span>
+        <span className="font-semibold">
+          {currentLanguage === 'en' ? 'English' : 'Kiswahili'}
+        </span>
       </div>
-      
-      <div className="auth-container">
-        <div className="auth-header">
-          <h1>Kazi Mashinani</h1>
-          <p>Kuunganisha Watalanta Vijijini na Fursa</p>
+
+      {/* Auth Container */}
+      <div className="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-md">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-green-600 text-white p-6 text-center">
+          <h1 className="text-2xl font-bold mb-2">Kazi Mashinani</h1>
+          <p className="opacity-90">
+            {currentLanguage === 'en' 
+              ? 'Connecting Rural Talent with Opportunities' 
+              : 'Kuunganisha Watalanta Vijijini na Fursa'}
+          </p>
         </div>
-        
-        <div className="auth-tabs">
-          <div className={`auth-tab ${activeTab === 'login' ? 'active' : ''}`} onClick={() => setActiveTab('login')}>
-            <span>Ingia</span>
+
+        {/* Tabs */}
+        <div className="flex bg-gray-800">
+          <div 
+            className={`flex-1 p-4 text-center cursor-pointer transition-colors ${
+              activeTab === 'login' ? 'bg-green-600' : 'hover:bg-gray-700'
+            }`}
+            onClick={() => setActiveTab('login')}
+          >
+            <span className="text-white font-medium">
+              {currentLanguage === 'en' ? 'Login' : 'Ingia'}
+            </span>
           </div>
-          <div className={`auth-tab ${activeTab === 'register' ? 'active' : ''}`} onClick={() => setActiveTab('register')}>
-            <span>Jisajili</span>
+          <div 
+            className={`flex-1 p-4 text-center cursor-pointer transition-colors ${
+              activeTab === 'register' ? 'bg-green-600' : 'hover:bg-gray-700'
+            }`}
+            onClick={() => setActiveTab('register')}
+          >
+            <span className="text-white font-medium">
+              {currentLanguage === 'en' ? 'Register' : 'Jisajili'}
+            </span>
           </div>
         </div>
-        
-        <div className="auth-content">
+
+        {/* Content */}
+        <div className="p-6">
+          {/* Message Display */}
           {message.text && (
-            <div className={`message ${message.type}`} style={{display: 'block'}}>
+            <div className={`p-3 rounded-lg mb-4 text-center ${
+              message.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+            }`}>
               {message.text}
             </div>
           )}
 
+          {/* Login Form */}
           {activeTab === 'login' && (
-            <div className="auth-form active">
-              <div className="form-group">
-                <label>Nambari ya Simu</label>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'}
+                </label>
                 <input
                   type="tel"
                   value={formData.loginPhone}
                   onChange={(e) => handleInputChange('loginPhone', e.target.value)}
-                  className="form-control"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="07XXXXXXXX"
                 />
               </div>
-              
-              <div className="form-group">
-                <label>Nenosiri</label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {currentLanguage === 'en' ? 'Password' : 'Nenosiri'}
+                </label>
                 <input
                   type="password"
                   value={formData.loginPassword}
                   onChange={(e) => handleInputChange('loginPassword', e.target.value)}
-                  className="form-control"
-                  placeholder="Weka nenosiri lako"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder={currentLanguage === 'en' ? 'Enter your password' : 'Weka nenosiri lako'}
                 />
               </div>
-              
-              <button className="btn" onClick={handleLogin} disabled={loading}>
-                {loading ? 'Inaingia...' : 'Ingia'}
+
+              <button
+                onClick={handleLogin}
+                disabled={loading}
+                className="w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center">
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    {currentLanguage === 'en' ? 'Logging in...' : 'Inaingia...'}
+                  </span>
+                ) : (
+                  currentLanguage === 'en' ? 'Login' : 'Ingia'
+                )}
               </button>
             </div>
           )}
-          
+
+          {/* Registration Form */}
           {activeTab === 'register' && (
-            <div className="auth-form active">
-              <div className="form-group">
-                <label>Jina Kamili</label>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {currentLanguage === 'en' ? 'Full Name' : 'Jina Kamili'}
+                </label>
                 <input
                   type="text"
                   value={formData.registerName}
                   onChange={(e) => handleInputChange('registerName', e.target.value)}
-                  className="form-control"
-                  placeholder="Weka jina lako kamili"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder={currentLanguage === 'en' ? 'Enter your full name' : 'Weka jina lako kamili'}
                 />
               </div>
-              
-              <div className="form-group">
-                <label>Nambari ya Simu</label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'}
+                </label>
                 <input
                   type="tel"
                   value={formData.registerPhone}
                   onChange={(e) => handleInputChange('registerPhone', e.target.value)}
-                  className="form-control"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="07XXXXXXXX"
                 />
               </div>
-              
-              <div className="form-group">
-                <label>Mahali Unapoishi</label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {currentLanguage === 'en' ? 'Location' : 'Mahali Unapoishi'}
+                </label>
                 <input
                   type="text"
                   value={formData.registerLocation}
                   onChange={(e) => handleInputChange('registerLocation', e.target.value)}
-                  className="form-control"
-                  placeholder="Weka eneo lako"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder={currentLanguage === 'en' ? 'Enter your location' : 'Weka eneo lako'}
                 />
               </div>
-              
-              <div className="form-group">
-                <label>Nenosiri</label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {currentLanguage === 'en' ? 'Password' : 'Nenosiri'}
+                </label>
                 <input
                   type="password"
                   value={formData.registerPassword}
                   onChange={(e) => handleInputChange('registerPassword', e.target.value)}
-                  className="form-control"
-                  placeholder="Tengeneza nenosiri"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder={currentLanguage === 'en' ? 'Create a password' : 'Tengeneza nenosiri'}
                 />
               </div>
-              
-              <div className="form-group">
-                <label>Mimi ni</label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {currentLanguage === 'en' ? 'I am a' : 'Mimi ni'}
+                </label>
                 <select
                   value={formData.registerRole}
                   onChange={(e) => handleInputChange('registerRole', e.target.value)}
-                  className="form-control"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="employee">Mtafuta Kazi</option>
-                  <option value="employer">Mwajiri</option>
+                  <option value="employee">
+                    {currentLanguage === 'en' ? 'Job Seeker' : 'Mtafuta Kazi'}
+                  </option>
+                  <option value="employer">
+                    {currentLanguage === 'en' ? 'Employer' : 'Mwajiri'}
+                  </option>
                 </select>
               </div>
-              
-              <button className="btn" onClick={handleRegistration} disabled={loading}>
-                {loading ? 'Inaunda akaunti...' : 'Jisajili'}
+
+              <button
+                onClick={handleRegistration}
+                disabled={loading}
+                className="w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center">
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    {currentLanguage === 'en' ? 'Creating account...' : 'Inaunda akaunti...'}
+                  </span>
+                ) : (
+                  currentLanguage === 'en' ? 'Register' : 'Jisajili'
+                )}
               </button>
             </div>
           )}
         </div>
       </div>
-
-      <style jsx global>{`
-        /* Include ALL your original CSS styles here */
-        :root {
-          --primary-color: #2ecc71;
-          --secondary-color: #3498db;
-          --accent-color: #e74c3c;
-          --dark-color: #2c3e50;
-          --light-color: #ecf0f1;
-          --text-color: #333;
-          --border-radius: 8px;
-          --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        
-        body {
-          background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-        }
-        
-        .auth-container {
-          background-color: white;
-          border-radius: var(--border-radius);
-          box-shadow: var(--box-shadow);
-          width: 100%;
-          max-width: 450px;
-          overflow: hidden;
-        }
-        
-        .auth-header {
-          background-color: var(--primary-color);
-          color: white;
-          padding: 20px;
-          text-align: center;
-        }
-        
-        .auth-header h1 {
-          font-size: 1.8rem;
-          margin-bottom: 5px;
-        }
-        
-        .auth-header p {
-          opacity: 0.9;
-        }
-        
-        .auth-tabs {
-          display: flex;
-          background-color: var(--dark-color);
-        }
-        
-        .auth-tab {
-          flex: 1;
-          padding: 15px;
-          text-align: center;
-          color: white;
-          cursor: pointer;
-          transition: background-color 0.3s;
-        }
-        
-        .auth-tab.active {
-          background-color: var(--primary-color);
-        }
-        
-        .auth-content {
-          padding: 30px;
-        }
-        
-        .auth-form {
-          display: none;
-        }
-        
-        .auth-form.active {
-          display: block;
-        }
-        
-        .form-group {
-          margin-bottom: 20px;
-        }
-        
-        .form-group label {
-          display: block;
-          margin-bottom: 8px;
-          font-weight: 500;
-          color: var(--dark-color);
-        }
-        
-        .form-control {
-          width: 100%;
-          padding: 12px 15px;
-          border: 1px solid #ddd;
-          border-radius: var(--border-radius);
-          font-size: 16px;
-          transition: border-color 0.3s;
-        }
-        
-        .form-control:focus {
-          border-color: var(--secondary-color);
-          outline: none;
-        }
-        
-        .btn {
-          display: inline-block;
-          width: 100%;
-          padding: 14px;
-          background-color: var(--primary-color);
-          color: white;
-          border: none;
-          border-radius: var(--border-radius);
-          font-size: 16px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: background-color 0.3s;
-          text-align: center;
-        }
-        
-        .btn:hover {
-          background-color: #27ae60;
-        }
-        
-        .btn:disabled {
-          background-color: #95a5a6;
-          cursor: not-allowed;
-        }
-        
-        .language-switcher {
-          position: absolute;
-          top: 20px;
-          right: 20px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          background: white;
-          padding: 8px 15px;
-          border-radius: 30px;
-          box-shadow: var(--box-shadow);
-          cursor: pointer;
-        }
-        
-        .language-switcher span {
-          font-weight: 500;
-        }
-        
-        .message {
-          padding: 12px;
-          border-radius: var(--border-radius);
-          margin-bottom: 20px;
-          text-align: center;
-        }
-        
-        .message.success {
-          background-color: #d4edda;
-          color: #155724;
-          border: 1px solid #c3e6cb;
-        }
-        
-        .message.error {
-          background-color: #f8d7da;
-          color: #721c24;
-          border: 1px solid #f5c6cb;
-        }
-        
-        @media (max-width: 480px) {
-          .auth-content {
-            padding: 20px;
-          }
-        }
-      `}</style>
     </div>
   )
 }
