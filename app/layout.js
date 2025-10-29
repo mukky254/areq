@@ -1,5 +1,4 @@
 import './globals.css'
-import { AppProvider } from '../context/AppContext'
 
 export const metadata = {
   title: 'Kazi Mashinani',
@@ -8,11 +7,9 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="antialiased" suppressHydrationWarning>
-        <AppProvider>
-          {children}
-        </AppProvider>
+    <html lang="en">
+      <body className="antialiased">
+        {children}
       </body>
     </html>
   )
