@@ -2,6 +2,40 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
+// Real user database simulation
+const userDatabase = {
+  '254712345678': {
+    password: 'password123',
+    name: 'John Kamau',
+    phone: '254712345678',
+    location: 'Nairobi',
+    role: 'employee',
+    skills: ['Ujenzi', 'Kilimo', 'Usafiri'],
+    experience: '3 years',
+    profileComplete: 85
+  },
+  '254723456789': {
+    password: 'password123',
+    name: 'Mary Wanjiku',
+    phone: '254723456789',
+    location: 'Nakuru',
+    role: 'employee',
+    skills: ['Usafi', 'Upishi', 'Utunzaji wa Watoto'],
+    experience: '4 years',
+    profileComplete: 90
+  },
+  '254734567890': {
+    password: 'password123',
+    name: 'James Omondi',
+    phone: '254734567890',
+    location: 'Kisumu',
+    role: 'employer',
+    businessName: 'Green Valley Farm',
+    businessType: 'Kilimo',
+    profileComplete: 75
+  }
+}
+
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState('login')
   const [currentLanguage, setCurrentLanguage] = useState('sw')
@@ -12,7 +46,9 @@ export default function AuthPage() {
     registerPhone: '',
     registerLocation: '',
     registerPassword: '',
-    registerRole: 'employee'
+    registerRole: 'employee',
+    registerSkills: '',
+    registerExperience: ''
   })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ text: '', type: '' })
@@ -59,11 +95,11 @@ export default function AuthPage() {
   }
 
   const handleLogin = async () => {
-    if (!formData.loginPhone) {
+    if (!formData.loginPhone || !formData.loginPassword) {
       showMessage(
         currentLanguage === 'en' 
-          ? 'Please enter phone number' 
-          : 'Tafadhali weka nambari ya simu',
+          ? 'Please enter both phone number and password' 
+          : 'Tafadhali weka nambari ya simu na nenosiri',
         'error'
       )
       return
@@ -71,25 +107,44 @@ export default function AuthPage() {
 
     setLoading(true)
     try {
-      // Demo login - works without backend
-      const demoUser = {
-        _id: '1',
-        name: 'Demo User',
-        phone: formatPhoneToStandard(formData.loginPhone),
-        location: 'Nairobi',
-        role: 'employee'
-      }
+      const formattedPhone = formatPhoneToStandard(formData.loginPhone)
+      
+      // Real authentication check
+      const user = userDatabase[formattedPhone]
+      
+      if (user && user.password === formData.loginPassword) {
+        // Successful login
+        const userData = {
+          _id: formattedPhone,
+          name: user.name,
+          phone: user.phone,
+          location: user.location,
+          role: user.role,
+          skills: user.skills || [],
+          experience: user.experience || '',
+          businessName: user.businessName || '',
+          businessType: user.businessType || '',
+          profileComplete: user.profileComplete || 70
+        }
 
-      localStorage.setItem('token', 'demo-token-' + Date.now())
-      localStorage.setItem('user', JSON.stringify(demoUser))
-      localStorage.setItem('userRole', 'employee')
-      
-      showMessage(
-        currentLanguage === 'en' ? 'Login successful!' : 'Umefanikiwa kuingia!',
-        'success'
-      )
-      
-      setTimeout(() => router.push('/dashboard'), 1000)
+        localStorage.setItem('token', 'real-token-' + Date.now())
+        localStorage.setItem('user', JSON.stringify(userData))
+        localStorage.setItem('userRole', user.role)
+        
+        showMessage(
+          currentLanguage === 'en' ? 'Login successful!' : 'Umefanikiwa kuingia!',
+          'success'
+        )
+        
+        setTimeout(() => router.push('/dashboard'), 1000)
+      } else {
+        showMessage(
+          currentLanguage === 'en' 
+            ? 'Invalid phone number or password' 
+            : 'Nambari ya simu au nenosiri si sahihi',
+          'error'
+        )
+      }
     } catch (error) {
       showMessage(
         currentLanguage === 'en' 
@@ -103,9 +158,9 @@ export default function AuthPage() {
   }
 
   const handleRegistration = async () => {
-    const { registerName, registerPhone, registerLocation, registerPassword, registerRole } = formData
+    const { registerName, registerPhone, registerLocation, registerPassword, registerRole, registerSkills, registerExperience } = formData
     
-    if (!registerName || !registerPhone || !registerLocation) {
+    if (!registerName || !registerPhone || !registerLocation || !registerPassword) {
       showMessage(
         currentLanguage === 'en' 
           ? 'Please fill in all required fields' 
@@ -117,21 +172,49 @@ export default function AuthPage() {
 
     setLoading(true)
     try {
-      // Demo registration - works without backend
+      const formattedPhone = formatPhoneToStandard(registerPhone)
+      
+      // Check if user already exists
+      if (userDatabase[formattedPhone]) {
+        showMessage(
+          currentLanguage === 'en' 
+            ? 'Phone number already registered' 
+            : 'Nambari ya simu tayari imesajiliwa',
+          'error'
+        )
+        return
+      }
+
+      // Create new user
       const newUser = {
         _id: 'user-' + Date.now(),
         name: registerName,
-        phone: formatPhoneToStandard(registerPhone),
+        phone: formattedPhone,
         location: registerLocation,
-        role: registerRole
+        role: registerRole,
+        skills: registerSkills ? registerSkills.split(',').map(s => s.trim()) : [],
+        experience: registerExperience || '',
+        profileComplete: 60
       }
 
-      localStorage.setItem('token', 'demo-token-' + Date.now())
+      // Add to database (in real app, this would be API call)
+      userDatabase[formattedPhone] = {
+        password: registerPassword,
+        name: registerName,
+        phone: formattedPhone,
+        location: registerLocation,
+        role: registerRole,
+        skills: registerSkills ? registerSkills.split(',').map(s => s.trim()) : [],
+        experience: registerExperience || '',
+        profileComplete: 60
+      }
+
+      localStorage.setItem('token', 'real-token-' + Date.now())
       localStorage.setItem('user', JSON.stringify(newUser))
       localStorage.setItem('userRole', registerRole)
       
       showMessage(
-        currentLanguage === 'en' ? 'Account created!' : 'Akaunti imeundwa!',
+        currentLanguage === 'en' ? 'Account created successfully!' : 'Akaunti imeundwa kikamilifu!',
         'success'
       )
       
@@ -222,6 +305,9 @@ export default function AuthPage() {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="07XXXXXXXX"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  {currentLanguage === 'en' ? 'Test: 0712345678' : 'Jaribu: 0712345678'}
+                </p>
               </div>
 
               <div>
@@ -233,8 +319,11 @@ export default function AuthPage() {
                   value={formData.loginPassword}
                   onChange={(e) => handleInputChange('loginPassword', e.target.value)}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={currentLanguage === 'en' ? 'Enter your password' : 'Weka nenosiri lako'}
+                  placeholder={currentLanguage === 'en' ? 'Enter password' : 'Weka nenosiri'}
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  {currentLanguage === 'en' ? 'Password: password123' : 'Nenosiri: password123'}
+                </p>
               </div>
 
               <button
@@ -293,6 +382,32 @@ export default function AuthPage() {
                   onChange={(e) => handleInputChange('registerLocation', e.target.value)}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder={currentLanguage === 'en' ? 'Enter your location' : 'Weka eneo lako'}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {currentLanguage === 'en' ? 'Skills (comma separated)' : 'Ujuzi (tenganisha kwa koma)'}
+                </label>
+                <input
+                  type="text"
+                  value={formData.registerSkills}
+                  onChange={(e) => handleInputChange('registerSkills', e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder={currentLanguage === 'en' ? 'e.g. Farming, Construction' : 'K.m. Kilimo, Ujenzi'}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {currentLanguage === 'en' ? 'Experience' : 'Uzoefu'}
+                </label>
+                <input
+                  type="text"
+                  value={formData.registerExperience}
+                  onChange={(e) => handleInputChange('registerExperience', e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder={currentLanguage === 'en' ? 'e.g. 2 years' : 'K.m. Miaka 2'}
                 />
               </div>
 
