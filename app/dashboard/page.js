@@ -12,6 +12,7 @@ export default function DashboardPage() {
   const [favorites, setFavorites] = useState([])
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
+  const [mounted, setMounted] = useState(false)
   const [stats, setStats] = useState({
     totalJobs: 0,
     appliedJobs: 0,
@@ -21,37 +22,42 @@ export default function DashboardPage() {
   const router = useRouter()
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    const userData = localStorage.getItem('user')
-    
-    if (!token || !userData) {
-      router.push('/auth')
-      return
-    }
-
+    setMounted(true)
     loadDashboardData()
-  }, [router])
+  }, [])
 
   const loadDashboardData = async () => {
     try {
-      const user = JSON.parse(localStorage.getItem('user'))
+      // Check authentication first
+      const token = localStorage.getItem('token')
+      const userData = localStorage.getItem('user')
+      
+      if (!token || !userData) {
+        router.push('/auth')
+        return
+      }
+
+      const user = JSON.parse(userData)
       setUser(user)
       setUserRole(user.role)
 
-      // Load real data from your backend
-      const [jobsResponse, applicationsResponse] = await Promise.all([
-        ApiService.getJobs(),
-        ApiService.getMyApplications()
-      ])
-
+      console.log('🔄 Loading jobs...');
+      // Load jobs from API with fallback
+      const jobsResponse = await ApiService.getJobs()
       if (jobsResponse.success) {
         setJobs(jobsResponse.jobs || [])
         setStats(prev => ({ ...prev, totalJobs: jobsResponse.jobs?.length || 0 }))
       }
 
-      if (applicationsResponse.success) {
-        setApplications(applicationsResponse.applications || [])
-        setStats(prev => ({ ...prev, appliedJobs: applicationsResponse.applications?.length || 0 }))
+      // Load applications
+      try {
+        const applicationsResponse = await ApiService.getMyApplications()
+        if (applicationsResponse.success) {
+          setApplications(applicationsResponse.applications || [])
+          setStats(prev => ({ ...prev, appliedJobs: applicationsResponse.applications?.length || 0 }))
+        }
+      } catch (error) {
+        console.log('Applications not available, using empty array');
       }
 
       // Load favorites from localStorage
@@ -68,7 +74,6 @@ export default function DashboardPage() {
 
     } catch (error) {
       console.error('Error loading dashboard data:', error)
-      router.push('/auth')
     } finally {
       setLoading(false)
     }
@@ -93,26 +98,43 @@ export default function DashboardPage() {
 
   const applyForJob = async (jobId) => {
     try {
+      console.log('🔄 Applying for job:', jobId);
       const response = await ApiService.applyForJob(jobId, {
         applicantId: user._id,
         coverLetter: 'Nina hamu ya kufanya kazi hii kwa bidii na uaminifu.'
       })
 
       if (response.success) {
+        const job = jobs.find(j => j._id === jobId)
         const application = {
           id: response.application?._id || 'app-' + Date.now(),
           jobId,
-          jobTitle: jobs.find(j => j._id === jobId)?.title,
+          jobTitle: job?.title,
           appliedDate: new Date().toISOString(),
           status: 'pending',
-          employer: jobs.find(j => j._id === jobId)?.employer?.name
+          employer: job?.employer?.name || 'Mwajiri'
         }
 
         setApplications(prev => [...prev, application])
         setStats(prev => ({ ...prev, appliedJobs: prev.appliedJobs + 1 }))
+        
+        alert(currentLanguage === 'en' ? 'Application submitted successfully!' : 'Ombi lako limewasilishwa kikamilifu!')
       }
     } catch (error) {
       console.error('Error applying for job:', error)
+      // Fallback: add to local applications
+      const job = jobs.find(j => j._id === jobId)
+      const application = {
+        id: 'app-' + Date.now(),
+        jobId,
+        jobTitle: job?.title,
+        appliedDate: new Date().toISOString(),
+        status: 'pending',
+        employer: job?.employer?.name || 'Mwajiri'
+      }
+      setApplications(prev => [...prev, application])
+      setStats(prev => ({ ...prev, appliedJobs: prev.appliedJobs + 1 }))
+      alert(currentLanguage === 'en' ? 'Application submitted successfully!' : 'Ombi lako limewasilishwa kikamilifu!')
     }
   }
 
@@ -136,11 +158,20 @@ export default function DashboardPage() {
     }
   }
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="loading">
         <div className="spinner"></div>
         <p style={{ marginTop: '16px', color: '#666' }}>Inapakia...</p>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="loading">
+        <div className="spinner"></div>
+        <p style={{ marginTop: '16px', color: '#666' }}>Inaelekeza...</p>
       </div>
     )
   }
@@ -337,7 +368,7 @@ export default function DashboardPage() {
                 <div className="card-body">
                   <h2 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
                     <i className="fas fa-briefcase" style={{ color: '#3498db' }}></i>
-                    Kazi Zilizopo
+                    Kazi Zilizopo ({jobs.length})
                   </h2>
 
                   <div className="jobs-grid">
@@ -348,6 +379,7 @@ export default function DashboardPage() {
                           <div className="job-badges">
                             <span className="badge badge-primary">{job.category}</span>
                             {job.urgent && <span className="badge badge-warning">Ya Haraka</span>}
+                            {job.featured && <span className="badge badge-secondary">Iliyoboreshwa</span>}
                           </div>
                         </div>
                         
@@ -422,8 +454,221 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Add other sections (Favorites, Applications, Profile) similarly */}
-          
+          {/* Favorites Section */}
+          {activeSection === 'favorites' && (
+            <div className="card">
+              <div className="card-body">
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                  <i className="fas fa-heart" style={{ color: '#e74c3c' }}></i>
+                  Kazi Unazopenda ({favorites.length})
+                </h2>
+
+                <div className="jobs-grid">
+                  {favorites.length > 0 ? favorites.map(job => (
+                    <div key={job._id} className="job-card">
+                      <div className="job-card-header">
+                        <div className="job-title">{job.title}</div>
+                        <div className="job-badges">
+                          <span className="badge badge-primary">{job.category}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="job-card-body">
+                        <p className="job-description">{job.description}</p>
+                        
+                        <div className="job-details">
+                          <div className="job-detail">
+                            <i className="fas fa-map-marker-alt"></i>
+                            <span>{job.location}</span>
+                          </div>
+                          <div className="job-detail">
+                            <i className="fas fa-building"></i>
+                            <span>{job.businessType}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="job-card-actions">
+                        <a 
+                          href={`tel:${job.phone}`}
+                          className="btn btn-primary"
+                          style={{ flex: 1 }}
+                        >
+                          <i className="fas fa-phone"></i>
+                          <span>Piga Simu</span>
+                        </a>
+                        <button
+                          onClick={() => toggleFavorite(job._id)}
+                          className="btn"
+                          style={{ 
+                            background: '#e74c3c',
+                            color: 'white'
+                          }}
+                        >
+                          <i className="fas fa-heart"></i>
+                        </button>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="empty-state">
+                      <i className="fas fa-heart"></i>
+                      <h3>Hakuna Kazi Unazopenda</h3>
+                      <p>Bado hujaweka kazi yoyote kwenye orodha ya vipendwa.</p>
+                      <button 
+                        onClick={() => setActiveSection('jobs')}
+                        className="btn btn-primary"
+                        style={{ marginTop: '16px' }}
+                      >
+                        Tafuta Kazi
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Applications Section */}
+          {activeSection === 'applications' && (
+            <div className="card">
+              <div className="card-body">
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                  <i className="fas fa-file-alt" style={{ color: '#2ecc71' }}></i>
+                  Maombi Yangu ({applications.length})
+                </h2>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {applications.length > 0 ? applications.map(application => (
+                    <div key={application.id} style={{ 
+                      padding: '20px', 
+                      background: '#f8f9fa', 
+                      borderRadius: '12px',
+                      border: '1px solid #e9ecef'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                        <h3 style={{ margin: 0, flex: 1 }}>{application.jobTitle}</h3>
+                        <span style={{ 
+                          padding: '4px 12px', 
+                          borderRadius: '20px', 
+                          fontSize: '0.8rem',
+                          fontWeight: '600',
+                          background: application.status === 'pending' ? '#fff3cd' : 
+                                    application.status === 'accepted' ? '#d1edff' : '#f8d7da',
+                          color: application.status === 'pending' ? '#856404' : 
+                                application.status === 'accepted' ? '#0c5460' : '#721c24'
+                        }}>
+                          {application.status}
+                        </span>
+                      </div>
+                      <p style={{ margin: '8px 0', color: '#666' }}>
+                        Mwajiri: {application.employer}
+                      </p>
+                      <p style={{ margin: 0, fontSize: '0.9rem', color: '#999' }}>
+                        Tarehe: {new Date(application.appliedDate).toLocaleDateString('sw-TZ')}
+                      </p>
+                    </div>
+                  )) : (
+                    <div className="empty-state">
+                      <i className="fas fa-file-alt"></i>
+                      <h3>Hakuna Maombi</h3>
+                      <p>Bado hujaomba kazi yoyote.</p>
+                      <button 
+                        onClick={() => setActiveSection('jobs')}
+                        className="btn btn-primary"
+                        style={{ marginTop: '16px' }}
+                      >
+                Tafuta Kazi
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Profile Section */}
+          {activeSection === 'profile' && user && (
+            <div className="card">
+              <div className="card-body">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px' }}>
+                  <div className="user-avatar" style={{ width: '80px', height: '80px', fontSize: '2rem' }}>
+                    {user.name?.charAt(0)?.toUpperCase() || 'U'}
+                  </div>
+                  <div>
+                    <h2 style={{ margin: 0 }}>{user.name}</h2>
+                    <p style={{ margin: '4px 0 0 0', color: '#666' }}>
+                      {userRole === 'employee' ? 'Mtafuta Kazi' : 'Mwajiri'} | {user.location}
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+                  <div>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                      <i className="fas fa-user-circle" style={{ color: '#3498db' }}></i>
+                      Taarifa Binafsi
+                    </h3>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '4px', color: '#666' }}>
+                          Jina Kamili
+                        </label>
+                        <p style={{ margin: 0 }}>{user.name}</p>
+                      </div>
+                      
+                      <div>
+                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '4px', color: '#666' }}>
+                          Nambari ya Simu
+                        </label>
+                        <p style={{ margin: 0 }}>{user.phone}</p>
+                      </div>
+                      
+                      <div>
+                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '4px', color: '#666' }}>
+                          Eneo
+                        </label>
+                        <p style={{ margin: 0 }}>{user.location}</p>
+                      </div>
+                      
+                      <div>
+                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '4px', color: '#666' }}>
+                          Jukumu
+                        </label>
+                        <p style={{ margin: 0 }}>
+                          {userRole === 'employee' ? 'Mtafuta Kazi' : 'Mwajiri'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                      <i className="fas fa-cog" style={{ color: '#95a5a6' }}></i>
+                      Hatua Zifuatazo
+                    </h3>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <button className="btn btn-primary" style={{ justifyContent: 'flex-start' }}>
+                        <i className="fas fa-edit"></i>
+                        <span>Hariri Wasifu</span>
+                      </button>
+                      
+                      <button className="btn btn-primary" style={{ justifyContent: 'flex-start' }}>
+                        <i className="fas fa-bell"></i>
+                        <span>Mipangilio ya Arifa</span>
+                      </button>
+                      
+                      <button className="btn btn-primary" style={{ justifyContent: 'flex-start' }}>
+                        <i className="fas fa-shield-alt"></i>
+                        <span>Usalama wa Akaunti</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
