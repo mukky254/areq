@@ -1,8 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ApiService } from '../../lib/api'
-import { formatPhoneToStandard } from '../../lib/utils'
+
+const API_BASE_URL = 'https://backita.onrender.com'
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState('login')
@@ -14,21 +14,19 @@ export default function AuthPage() {
     registerPhone: '',
     registerLocation: '',
     registerPassword: '',
-    registerRole: 'employee',
-    forgotPhone: '',
-    resetCode: '',
-    newPassword: '',
-    confirmPassword: ''
+    registerRole: 'employee'
   })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ text: '', type: '' })
-  const [verificationCode, setVerificationCode] = useState(['', '', '', '', '', ''])
   const router = useRouter()
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      router.push('/dashboard')
+    // Check if already logged in
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token')
+      if (token) {
+        router.push('/dashboard')
+      }
     }
 
     const savedLanguage = localStorage.getItem('preferredLanguage')
@@ -52,6 +50,16 @@ export default function AuthPage() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  const formatPhoneToStandard = (phone) => {
+    let cleanPhone = phone.replace(/\D/g, '')
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '254' + cleanPhone.substring(1)
+    } else if (!cleanPhone.startsWith('254')) {
+      cleanPhone = '254' + cleanPhone
+    }
+    return cleanPhone
+  }
+
   const handleLogin = async () => {
     if (!formData.loginPhone || !formData.loginPassword) {
       showMessage(
@@ -66,12 +74,24 @@ export default function AuthPage() {
     setLoading(true)
     try {
       const formattedPhone = formatPhoneToStandard(formData.loginPhone)
-      const response = await ApiService.login(formattedPhone, formData.loginPassword)
+      
+      const response = await fetch(`${API_BASE_URL}/auth/signin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          phone: formattedPhone, 
+          password: formData.loginPassword 
+        })
+      })
 
-      if (response.success) {
-        localStorage.setItem('token', response.token)
-        localStorage.setItem('user', JSON.stringify(response.user))
-        localStorage.setItem('userRole', response.user.role)
+      const data = await response.json()
+      
+      if (response.ok && data.success) {
+        localStorage.setItem('token', data.token)
+        localStorage.setItem('user', JSON.stringify(data.user))
+        localStorage.setItem('userRole', data.user.role)
         
         showMessage(
           currentLanguage === 'en' ? 'Login successful!' : 'Umefanikiwa kuingia!',
@@ -79,6 +99,8 @@ export default function AuthPage() {
         )
         
         setTimeout(() => router.push('/dashboard'), 1000)
+      } else {
+        throw new Error(data.error || data.message || (currentLanguage === 'en' ? 'Login failed' : 'Imeshindwa kuingia'))
       }
     } catch (error) {
       showMessage(
@@ -108,18 +130,27 @@ export default function AuthPage() {
     setLoading(true)
     try {
       const formattedPhone = formatPhoneToStandard(registerPhone)
-      const response = await ApiService.register({
-        name: registerName,
-        phone: formattedPhone,
-        password: registerPassword,
-        role: registerRole,
-        location: registerLocation
+      
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: registerName,
+          phone: formattedPhone,
+          password: registerPassword,
+          role: registerRole,
+          location: registerLocation
+        })
       })
 
-      if (response.success) {
-        localStorage.setItem('token', response.token)
-        localStorage.setItem('user', JSON.stringify(response.user))
-        localStorage.setItem('userRole', response.user.role)
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        localStorage.setItem('token', data.token)
+        localStorage.setItem('user', JSON.stringify(data.user))
+        localStorage.setItem('userRole', data.user.role)
         
         showMessage(
           currentLanguage === 'en' ? 'Account created!' : 'Akaunti imeundwa!',
@@ -127,6 +158,8 @@ export default function AuthPage() {
         )
         
         setTimeout(() => router.push('/dashboard'), 1000)
+      } else {
+        throw new Error(data.error || data.message || (currentLanguage === 'en' ? 'Registration failed' : 'Usajili umeshindwa'))
       }
     } catch (error) {
       showMessage(
@@ -140,17 +173,11 @@ export default function AuthPage() {
     }
   }
 
-  const moveToNext = (currentInput, nextIndex) => {
-    if (currentInput.value && nextIndex <= 5) {
-      document.getElementById(`code-input-${nextIndex}`)?.focus()
-    }
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center p-4">
       {/* Language Switcher */}
       <div 
-        className="fixed top-4 right-4 flex items-center gap-2 bg-white p-3 rounded-full shadow-lg cursor-pointer hover-lift"
+        className="fixed top-4 right-4 flex items-center gap-2 bg-white p-3 rounded-full shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
         onClick={toggleLanguage}
       >
         <span className="text-lg">{currentLanguage === 'en' ? '🇺🇸' : '🇰🇪'}</span>
@@ -160,12 +187,10 @@ export default function AuthPage() {
       </div>
 
       {/* Auth Container */}
-      <div className="auth-container glass-effect rounded-2xl shadow-2xl overflow-hidden w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-md">
         {/* Header */}
-        <div className="auth-header bg-gradient-to-r from-blue-600 to-green-600 text-white p-6 text-center">
-          <h1 className="text-2xl font-bold mb-2">
-            {currentLanguage === 'en' ? 'Kazi Mashinani' : 'Kazi Mashinani'}
-          </h1>
+        <div className="bg-gradient-to-r from-blue-600 to-green-600 text-white p-6 text-center">
+          <h1 className="text-2xl font-bold mb-2">Kazi Mashinani</h1>
           <p className="opacity-90">
             {currentLanguage === 'en' 
               ? 'Connecting Rural Talent with Opportunities' 
@@ -174,9 +199,9 @@ export default function AuthPage() {
         </div>
 
         {/* Tabs */}
-        <div className="auth-tabs flex bg-gray-800">
+        <div className="flex bg-gray-800">
           <div 
-            className={`auth-tab flex-1 p-4 text-center cursor-pointer transition-colors ${
+            className={`flex-1 p-4 text-center cursor-pointer transition-colors ${
               activeTab === 'login' ? 'bg-green-600' : 'hover:bg-gray-700'
             }`}
             onClick={() => setActiveTab('login')}
@@ -186,7 +211,7 @@ export default function AuthPage() {
             </span>
           </div>
           <div 
-            className={`auth-tab flex-1 p-4 text-center cursor-pointer transition-colors ${
+            className={`flex-1 p-4 text-center cursor-pointer transition-colors ${
               activeTab === 'register' ? 'bg-green-600' : 'hover:bg-gray-700'
             }`}
             onClick={() => setActiveTab('register')}
@@ -198,18 +223,20 @@ export default function AuthPage() {
         </div>
 
         {/* Content */}
-        <div className="auth-content p-6">
+        <div className="p-6">
           {/* Message Display */}
           {message.text && (
-            <div className={`message ${message.type} p-3 rounded-lg mb-4 text-center`}>
+            <div className={`p-3 rounded-lg mb-4 text-center ${
+              message.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+            }`}>
               {message.text}
             </div>
           )}
 
           {/* Login Form */}
           {activeTab === 'login' && (
-            <div className="space-y-4 slide-fade-in">
-              <div className="form-group">
+            <div className="space-y-4">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'}
                 </label>
@@ -217,12 +244,12 @@ export default function AuthPage() {
                   type="tel"
                   value={formData.loginPhone}
                   onChange={(e) => handleInputChange('loginPhone', e.target.value)}
-                  className="form-control w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="07XXXXXXXX"
                 />
               </div>
 
-              <div className="form-group">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {currentLanguage === 'en' ? 'Password' : 'Nenosiri'}
                 </label>
@@ -230,7 +257,7 @@ export default function AuthPage() {
                   type="password"
                   value={formData.loginPassword}
                   onChange={(e) => handleInputChange('loginPassword', e.target.value)}
-                  className="form-control w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder={currentLanguage === 'en' ? 'Enter your password' : 'Weka nenosiri lako'}
                 />
               </div>
@@ -238,7 +265,7 @@ export default function AuthPage() {
               <button
                 onClick={handleLogin}
                 disabled={loading}
-                className="btn w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <span className="flex items-center justify-center">
@@ -249,22 +276,13 @@ export default function AuthPage() {
                   currentLanguage === 'en' ? 'Login' : 'Ingia'
                 )}
               </button>
-
-              <div className="text-center mt-4">
-                <button
-                  onClick={() => setActiveTab('forgot')}
-                  className="text-blue-600 hover:text-blue-800 text-sm"
-                >
-                  {currentLanguage === 'en' ? 'Forgot Password?' : 'Umesahau Nenosiri?'}
-                </button>
-              </div>
             </div>
           )}
 
           {/* Registration Form */}
           {activeTab === 'register' && (
-            <div className="space-y-4 slide-fade-in">
-              <div className="form-group">
+            <div className="space-y-4">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {currentLanguage === 'en' ? 'Full Name' : 'Jina Kamili'}
                 </label>
@@ -272,12 +290,12 @@ export default function AuthPage() {
                   type="text"
                   value={formData.registerName}
                   onChange={(e) => handleInputChange('registerName', e.target.value)}
-                  className="form-control w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder={currentLanguage === 'en' ? 'Enter your full name' : 'Weka jina lako kamili'}
                 />
               </div>
 
-              <div className="form-group">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'}
                 </label>
@@ -285,13 +303,13 @@ export default function AuthPage() {
                   type="tel"
                   value={formData.registerPhone}
                   onChange={(e) => handleInputChange('registerPhone', e.target.value)}
-                  className="form-control w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="07XXXXXXXX"
                   required
                 />
               </div>
 
-              <div className="form-group">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {currentLanguage === 'en' ? 'Enter Location' : 'Mahali Unapoishi'}
                 </label>
@@ -299,13 +317,13 @@ export default function AuthPage() {
                   type="text"
                   value={formData.registerLocation}
                   onChange={(e) => handleInputChange('registerLocation', e.target.value)}
-                  className="form-control w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder={currentLanguage === 'en' ? 'Enter your location' : 'Weka eneo lako'}
                   required
                 />
               </div>
 
-              <div className="form-group">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {currentLanguage === 'en' ? 'Password' : 'Nenosiri'}
                 </label>
@@ -313,19 +331,19 @@ export default function AuthPage() {
                   type="password"
                   value={formData.registerPassword}
                   onChange={(e) => handleInputChange('registerPassword', e.target.value)}
-                  className="form-control w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder={currentLanguage === 'en' ? 'Create a password' : 'Tengeneza nenosiri'}
                 />
               </div>
 
-              <div className="form-group">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {currentLanguage === 'en' ? 'I am a' : 'Mimi ni'}
                 </label>
                 <select
                   value={formData.registerRole}
                   onChange={(e) => handleInputChange('registerRole', e.target.value)}
-                  className="form-control w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="employee">
                     {currentLanguage === 'en' ? 'Job Seeker' : 'Mtafuta Kazi'}
@@ -339,7 +357,7 @@ export default function AuthPage() {
               <button
                 onClick={handleRegistration}
                 disabled={loading}
-                className="btn w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <span className="flex items-center justify-center">
