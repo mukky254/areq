@@ -16,23 +16,23 @@ export default function RootLayout({ children }) {
           rel="stylesheet" 
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" 
         />
-            <script
-  dangerouslySetInnerHTML={{
-    __html: `
-      function googleTranslateElementInit() {
-        new google.translate.TranslateElement({
-          pageLanguage: 'en',
-          includedLanguages: 'en,sw',
-          layout: google.translate.TranslateElement.InlineLayout.SIMPLE
-        }, 'google_translate_element');
-      }
-    `
-  }}
-/>
-<script
-  type="text/javascript"
-  src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
-/>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              function googleTranslateElementInit() {
+                new google.translate.TranslateElement({
+                  pageLanguage: 'en',
+                  includedLanguages: 'en,sw',
+                  layout: google.translate.TranslateElement.InlineLayout.SIMPLE
+                }, 'google_translate_element');
+              }
+            `
+          }}
+        />
+        <script
+          type="text/javascript"
+          src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
+        />
       </head>
       <body className={inter.className}>
         {children}
