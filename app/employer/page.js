@@ -26,6 +26,7 @@ export default function EmployerPage() {
     location: '',
     businessName: ''
   })
+  const [sideNavOpen, setSideNavOpen] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -85,6 +86,7 @@ export default function EmployerPage() {
         ...jobForm,
         employerId: user._id,
         employerName: user.name,
+        businessType: user.businessName || user.name,
         skills: jobForm.skills ? jobForm.skills.split(',').map(skill => skill.trim()).filter(skill => skill) : [],
         postedDate: new Date().toISOString()
       }
@@ -230,6 +232,14 @@ export default function EmployerPage() {
     }
   }
 
+  const openSideNav = () => {
+    setSideNavOpen(true)
+  }
+
+  const closeSideNav = () => {
+    setSideNavOpen(false)
+  }
+
   if (!mounted || loading) {
     return (
       <div className="loading">
@@ -258,76 +268,62 @@ export default function EmployerPage() {
             <div className="user-menu">
               <button
                 onClick={toggleLanguage}
-                className="language-switcher-btn"
-                style={{ 
-                  background: 'transparent', 
-                  border: 'none', 
-                  padding: '8px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  color: '#333'
-                }}
+                className="google-translate"
               >
-                {currentLanguage === 'en' ? '🇺🇸 EN' : '🇰🇪 SW'}
+                {currentLanguage === 'en' ? '🇺🇸 English' : '🇰🇪 Kiswahili'}
               </button>
               
-              <div className="user-info">
-                <div className="user-avatar">
-                  {user?.name?.charAt(0)?.toUpperCase() || 'M'}
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div className="user-name">{user?.name}</div>
-                  <div className="user-role">
-                    {currentLanguage === 'en' ? 'Employer' : 'Mwajiri'}
-                  </div>
-                </div>
-              </div>
-              
-              <button onClick={logout} className="btn btn-danger" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="fas fa-sign-out-alt"></i>
-                <span>{currentLanguage === 'en' ? 'Logout' : 'Toka'}</span>
+              <button 
+                className="menu-button"
+                onClick={openSideNav}
+              >
+                <i className="fas fa-bars"></i>
               </button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Navigation */}
-      <nav className="nav">
-        <div className="container">
-          <div className="nav-content">
-            {[
-              { id: 'dashboard', icon: 'fa-chart-line', en: 'Dashboard', sw: 'Dashibodi' },
-              { id: 'post-job', icon: 'fa-plus-circle', en: 'Post Job', sw: 'Tanga Kazi' },
-              { id: 'my-jobs', icon: 'fa-briefcase', en: 'My Jobs', sw: 'Kazi Zangu' },
-              { id: 'applications', icon: 'fa-file-alt', en: 'Applications', sw: 'Maombi' },
-              { id: 'profile', icon: 'fa-user-tie', en: 'Profile', sw: 'Wasifu' }
-            ].map(section => (
-              <div
-                key={section.id}
-                className={`nav-item ${activeSection === section.id ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveSection(section.id)
-                  if (section.id === 'post-job') {
-                    setEditJob(null)
-                    setJobForm({
-                      title: '',
-                      description: '',
-                      location: '',
-                      category: 'kilimo',
-                      skills: '',
-                      phone: user.phone || ''
-                    })
-                  }
-                }}
-              >
-                <i className={`fas ${section.icon}`}></i>
-                <span>{currentLanguage === 'en' ? section.en : section.sw}</span>
-              </div>
-            ))}
-          </div>
+      {/* Side Navigation */}
+      <div className={`overlay ${sideNavOpen ? 'show' : ''}`} onClick={closeSideNav}></div>
+      
+      <div className={`side-nav ${sideNavOpen ? 'open' : ''}`}>
+        <div className="side-nav-header">
+          <h2 className="side-nav-title">Quick Links</h2>
+          <button className="side-nav-close" onClick={closeSideNav}>
+            <i className="fas fa-times"></i>
+          </button>
         </div>
-      </nav>
+        
+        <div className="side-nav-content">
+          <a 
+            href="/blog" 
+            className="side-nav-item"
+            onClick={closeSideNav}
+          >
+            <i className="fas fa-info-circle"></i>
+            <span>About Kazi Mashinani</span>
+          </a>
+          
+          <a 
+            href="tel:+254790528837" 
+            className="side-nav-item"
+            onClick={closeSideNav}
+          >
+            <i className="fas fa-phone"></i>
+            <span>Call Us: +254790528837</span>
+          </a>
+          
+          <a 
+            href="mailto:myhassan19036@gmail.com" 
+            className="side-nav-item"
+            onClick={closeSideNav}
+          >
+            <i className="fas fa-envelope"></i>
+            <span>Email: myhassan19036@gmail.com</span>
+          </a>
+        </div>
+      </div>
 
       {/* Main Content */}
       <main className="main-content">
@@ -842,6 +838,35 @@ export default function EmployerPage() {
           )}
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="footer">
+        <div className="footer-content">
+          <p>Kazi Mashinani &copy; 2025. {currentLanguage === 'en' ? 'All rights reserved.' : 'Haki zote zimehifadhiwa.'}</p>
+        </div>
+      </footer>
+
+      {/* Bottom Navigation */}
+      <nav className="bottom-nav">
+        <div className="bottom-nav-content">
+          {[
+            { id: 'dashboard', icon: 'fa-chart-line', en: 'Dashboard', sw: 'Dashibodi' },
+            { id: 'post-job', icon: 'fa-plus-circle', en: 'Post Job', sw: 'Tanga Kazi' },
+            { id: 'my-jobs', icon: 'fa-briefcase', en: 'My Jobs', sw: 'Kazi Zangu' },
+            { id: 'applications', icon: 'fa-file-alt', en: 'Applications', sw: 'Maombi' },
+            { id: 'profile', icon: 'fa-user-tie', en: 'Profile', sw: 'Wasifu' }
+          ].map(section => (
+            <div
+              key={section.id}
+              className={`bottom-nav-item ${activeSection === section.id ? 'active' : ''}`}
+              onClick={() => setActiveSection(section.id)}
+            >
+              <i className={`fas ${section.icon}`}></i>
+              <span>{currentLanguage === 'en' ? section.en : section.sw}</span>
+            </div>
+          ))}
+        </div>
+      </nav>
     </div>
   )
 }
