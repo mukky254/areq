@@ -36,10 +36,8 @@ export default function AuthPage() {
         return
       }
 
-      const savedLanguage = localStorage.getItem('preferredLanguage')
-      if (savedLanguage) {
-        setCurrentLanguage(savedLanguage)
-      }
+      const savedLanguage = localStorage.getItem('preferredLanguage') || 'sw'
+      setCurrentLanguage(savedLanguage)
     }
   }, [router])
 
@@ -58,12 +56,13 @@ export default function AuthPage() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleLogin = async () => {
-    if (!formData.loginPhone) {
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    if (!formData.loginPhone || !formData.loginPassword) {
       showMessage(
         currentLanguage === 'en' 
-          ? 'Please enter phone number' 
-          : 'Tafadhali weka nambari ya simu',
+          ? 'Please enter phone number and password' 
+          : 'Tafadhali weka nambari ya simu na nenosiri',
         'error'
       )
       return
@@ -73,7 +72,6 @@ export default function AuthPage() {
     try {
       const formattedPhone = formatPhoneToStandard(formData.loginPhone)
       
-      console.log('🔄 Attempting login...');
       const response = await ApiService.login(formattedPhone, formData.loginPassword)
 
       if (response.success) {
@@ -93,6 +91,13 @@ export default function AuthPage() {
             router.push('/dashboard')
           }
         }, 1000)
+      } else {
+        showMessage(
+          currentLanguage === 'en' 
+            ? 'Invalid phone number or password' 
+            : 'Nambari ya simu au nenosiri si sahihi',
+          'error'
+        )
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -107,7 +112,8 @@ export default function AuthPage() {
     }
   }
 
-  const handleRegistration = async () => {
+  const handleRegistration = async (e) => {
+    e.preventDefault()
     const { registerName, registerPhone, registerLocation, registerPassword, registerRole } = formData
     
     if (!registerName || !registerPhone || !registerLocation || !registerPassword) {
@@ -124,7 +130,6 @@ export default function AuthPage() {
     try {
       const formattedPhone = formatPhoneToStandard(registerPhone)
       
-      console.log('🔄 Attempting registration...');
       const response = await ApiService.register({
         name: registerName,
         phone: formattedPhone,
@@ -169,7 +174,7 @@ export default function AuthPage() {
       <div className="auth-container">
         <div className="loading">
           <div className="spinner"></div>
-          <p style={{ marginTop: '16px', color: '#666' }}>
+          <p style={{ marginTop: '16px', color: 'white' }}>
             {currentLanguage === 'en' ? 'Loading...' : 'Inapakia...'}
           </p>
         </div>
@@ -179,14 +184,8 @@ export default function AuthPage() {
 
   return (
     <div className="auth-container">
-      {/* Language Switcher */}
-      <div 
-        className="language-switcher"
-        onClick={toggleLanguage}
-      >
-        <span style={{ fontWeight: '600' }}>
-          {currentLanguage === 'en' ? '🇺🇸 English' : '🇰🇪 Kiswahili'}
-        </span>
+      <div className="language-switcher" onClick={toggleLanguage}>
+        <span>{currentLanguage === 'en' ? '🇺🇸 English' : '🇰🇪 Kiswahili'}</span>
       </div>
 
       <div className="auth-card">
@@ -222,15 +221,8 @@ export default function AuthPage() {
             </div>
           )}
 
-          {/* Test Credentials Info */}
-          <div className="test-credentials">
-            <strong>{currentLanguage === 'en' ? 'Test Accounts:' : 'Akaunti za Kujaribu:'}</strong><br/>
-            • {currentLanguage === 'en' ? 'Employee' : 'Mfanyakazi'}: <strong>0712345678</strong> / <strong>password123</strong><br/>
-            • {currentLanguage === 'en' ? 'Employer' : 'Mwajiri'}: <strong>0734567890</strong> / <strong>password123</strong>
-          </div>
-
           {activeTab === 'login' && (
-            <div>
+            <form onSubmit={handleLogin}>
               <div className="form-group">
                 <label className="form-label">
                   {currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'}
@@ -241,6 +233,7 @@ export default function AuthPage() {
                   onChange={(e) => handleInputChange('loginPhone', e.target.value)}
                   className="form-control"
                   placeholder="07XXXXXXXX"
+                  required
                 />
               </div>
 
@@ -254,11 +247,12 @@ export default function AuthPage() {
                   onChange={(e) => handleInputChange('loginPassword', e.target.value)}
                   className="form-control"
                   placeholder={currentLanguage === 'en' ? 'Enter your password' : 'Weka nenosiri lako'}
+                  required
                 />
               </div>
 
               <button
-                onClick={handleLogin}
+                type="submit"
                 disabled={loading}
                 className="btn btn-primary btn-block"
               >
@@ -271,14 +265,14 @@ export default function AuthPage() {
                   currentLanguage === 'en' ? 'Login' : 'Ingia'
                 )}
               </button>
-            </div>
+            </form>
           )}
 
           {activeTab === 'register' && (
-            <div>
+            <form onSubmit={handleRegistration}>
               <div className="form-group">
                 <label className="form-label">
-                  {currentLanguage === 'en' ? 'Full Name' : 'Jina Kamili'}
+                  {currentLanguage === 'en' ? 'Full Name' : 'Jina Kamili'} *
                 </label>
                 <input
                   type="text"
@@ -286,12 +280,13 @@ export default function AuthPage() {
                   onChange={(e) => handleInputChange('registerName', e.target.value)}
                   className="form-control"
                   placeholder={currentLanguage === 'en' ? 'Enter your full name' : 'Weka jina lako kamili'}
+                  required
                 />
               </div>
 
               <div className="form-group">
                 <label className="form-label">
-                  {currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'}
+                  {currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'} *
                 </label>
                 <input
                   type="tel"
@@ -299,12 +294,13 @@ export default function AuthPage() {
                   onChange={(e) => handleInputChange('registerPhone', e.target.value)}
                   className="form-control"
                   placeholder="07XXXXXXXX"
+                  required
                 />
               </div>
 
               <div className="form-group">
                 <label className="form-label">
-                  {currentLanguage === 'en' ? 'Location' : 'Mahali Unapoishi'}
+                  {currentLanguage === 'en' ? 'Location' : 'Mahali Unapoishi'} *
                 </label>
                 <input
                   type="text"
@@ -312,12 +308,13 @@ export default function AuthPage() {
                   onChange={(e) => handleInputChange('registerLocation', e.target.value)}
                   className="form-control"
                   placeholder={currentLanguage === 'en' ? 'Enter your location' : 'Weka eneo lako'}
+                  required
                 />
               </div>
 
               <div className="form-group">
                 <label className="form-label">
-                  {currentLanguage === 'en' ? 'Password' : 'Nenosiri'}
+                  {currentLanguage === 'en' ? 'Password' : 'Nenosiri'} *
                 </label>
                 <input
                   type="password"
@@ -325,17 +322,20 @@ export default function AuthPage() {
                   onChange={(e) => handleInputChange('registerPassword', e.target.value)}
                   className="form-control"
                   placeholder={currentLanguage === 'en' ? 'Create a password' : 'Tengeneza nenosiri'}
+                  required
+                  minLength="6"
                 />
               </div>
 
               <div className="form-group">
                 <label className="form-label">
-                  {currentLanguage === 'en' ? 'I am a' : 'Mimi ni'}
+                  {currentLanguage === 'en' ? 'I am a' : 'Mimi ni'} *
                 </label>
                 <select
                   value={formData.registerRole}
                   onChange={(e) => handleInputChange('registerRole', e.target.value)}
                   className="form-control"
+                  required
                 >
                   <option value="employee">
                     {currentLanguage === 'en' ? 'Job Seeker' : 'Mtafuta Kazi'}
@@ -347,7 +347,7 @@ export default function AuthPage() {
               </div>
 
               <button
-                onClick={handleRegistration}
+                type="submit"
                 disabled={loading}
                 className="btn btn-primary btn-block"
               >
@@ -360,7 +360,7 @@ export default function AuthPage() {
                   currentLanguage === 'en' ? 'Register' : 'Jisajili'
                 )}
               </button>
-            </div>
+            </form>
           )}
         </div>
       </div>
