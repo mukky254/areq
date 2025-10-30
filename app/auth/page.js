@@ -1,367 +1,302 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ApiService, formatPhoneToStandard } from '../../lib/api'
+import { ApiService } from '../../lib/api'
+import { AppUtils } from '../../lib/utils'
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState('login')
   const [currentLanguage, setCurrentLanguage] = useState('sw')
-  const [formData, setFormData] = useState({
-    loginPhone: '',
-    loginPassword: '',
-    registerName: '',
-    registerPhone: '',
-    registerLocation: '',
-    registerPassword: '',
-    registerRole: 'employee'
-  })
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState({ text: '', type: '' })
-  const [mounted, setMounted] = useState(false)
+  const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    password: '',
+    location: '',
+    role: 'employee',
+    confirmPassword: ''
+  })
+  const [errors, setErrors] = useState({})
+  const [showPassword, setShowPassword] = useState(false)
+
   const router = useRouter()
 
   useEffect(() => {
-    setMounted(true)
-    
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('token')
-      const userRole = localStorage.getItem('userRole')
-      
-      if (token && userRole) {
-        if (userRole === 'employer') {
-          router.push('/employer')
-        } else {
-          router.push('/dashboard')
-        }
-        return
-      }
-
-      const savedLanguage = localStorage.getItem('preferredLanguage') || 'sw'
-      setCurrentLanguage(savedLanguage)
-    }
-  }, [router])
+    const savedLanguage = localStorage.getItem('preferredLanguage') || 'sw'
+    setCurrentLanguage(savedLanguage)
+  }, [])
 
   const toggleLanguage = () => {
     const newLanguage = currentLanguage === 'en' ? 'sw' : 'en'
     setCurrentLanguage(newLanguage)
     localStorage.setItem('preferredLanguage', newLanguage)
+    AppUtils.addNotification(
+      newLanguage === 'en' ? 'Language changed to English' : 'Lugha imebadilishwa kuwa Kiswahili',
+      'info'
+    )
   }
 
-  const showMessage = (text, type) => {
-    setMessage({ text, type })
-    setTimeout(() => setMessage({ text: '', type: '' }), 5000)
-  }
-
-  const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-  }
-
-  const handleLogin = async (e) => {
-    e.preventDefault()
-    if (!formData.loginPhone || !formData.loginPassword) {
-      showMessage(
-        currentLanguage === 'en' 
-          ? 'Please enter phone number and password' 
-          : 'Tafadhali weka nambari ya simu na nenosiri',
-        'error'
-      )
-      return
+  const validateForm = () => {
+    const newErrors = {}
+    
+    if (activeTab === 'register') {
+      if (!formData.name.trim()) {
+        newErrors.name = currentLanguage === 'en' ? 'Name is required' : 'Jina linahitajika'
+      }
+      if (!formData.location.trim()) {
+        newErrors.location = currentLanguage === 'en' ? 'Location is required' : 'Eneo linahitajika'
+      }
     }
+    
+    if (!formData.phone.trim()) {
+      newErrors.phone = currentLanguage === 'en' ? 'Phone number is required' : 'Nambari ya simu inahitajika'
+    } else if (!/^[0-9+-\s()]{10,}$/.test(formData.phone)) {
+      newErrors.phone = currentLanguage === 'en' ? 'Invalid phone number' : 'Nambari ya simu si sahihi'
+    }
+    
+    if (!formData.password) {
+      newErrors.password = currentLanguage === 'en' ? 'Password is required' : 'Nenosiri linahitajika'
+    } else if (formData.password.length < 6) {
+      newErrors.password = currentLanguage === 'en' ? 'Password must be at least 6 characters' : 'Nenosiri lazima liwe na herufi 6 au zaidi'
+    }
+    
+    if (activeTab === 'register' && formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = currentLanguage === 'en' ? 'Passwords do not match' : 'Nenosiri halifanani'
+    }
+    
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
 
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    
+    if (!validateForm()) return
+    
     setLoading(true)
+    setErrors({})
+
     try {
-      const formattedPhone = formatPhoneToStandard(formData.loginPhone)
+      let response
       
-      const response = await ApiService.login(formattedPhone, formData.loginPassword)
+      if (activeTab === 'login') {
+        response = await ApiService.login(formData.phone, formData.password)
+      } else {
+        const userData = {
+          name: formData.name,
+          phone: formData.phone,
+          password: formData.password,
+          location: formData.location,
+          role: formData.role
+        }
+        response = await ApiService.register(userData)
+      }
 
       if (response.success) {
         localStorage.setItem('token', response.token)
         localStorage.setItem('user', JSON.stringify(response.user))
         localStorage.setItem('userRole', response.user.role)
         
-        showMessage(
-          currentLanguage === 'en' ? 'Login successful!' : 'Umefanikiwa kuingia!',
+        AppUtils.addNotification(
+          currentLanguage === 'en' ? 'Welcome to Kazi Mashinani!' : 'Karibu kwenye Kazi Mashinani!',
           'success'
         )
         
-        setTimeout(() => {
-          if (response.user.role === 'employer') {
-            router.push('/employer')
-          } else {
-            router.push('/dashboard')
-          }
-        }, 1000)
-      } else {
-        showMessage(
-          currentLanguage === 'en' 
-            ? 'Invalid phone number or password' 
-            : 'Nambari ya simu au nenosiri si sahihi',
-          'error'
-        )
+        if (response.user.role === 'employer') {
+          router.push('/employer')
+        } else {
+          router.push('/dashboard')
+        }
       }
     } catch (error) {
-      console.error('Login error:', error);
-      showMessage(
-        currentLanguage === 'en' 
-          ? 'Login failed. Please try again.' 
-          : 'Imeshindwa kuingia. Tafadhali jaribu tena.',
-        'error'
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleRegistration = async (e) => {
-    e.preventDefault()
-    const { registerName, registerPhone, registerLocation, registerPassword, registerRole } = formData
-    
-    if (!registerName || !registerPhone || !registerLocation || !registerPassword) {
-      showMessage(
-        currentLanguage === 'en' 
-          ? 'Please fill in all required fields' 
-          : 'Tafadhali jaza sehemu zote zinazohitajika',
-        'error'
-      )
-      return
-    }
-
-    setLoading(true)
-    try {
-      const formattedPhone = formatPhoneToStandard(registerPhone)
-      
-      const response = await ApiService.register({
-        name: registerName,
-        phone: formattedPhone,
-        password: registerPassword,
-        role: registerRole,
-        location: registerLocation
+      console.error('Auth error:', error)
+      setErrors({ 
+        submit: currentLanguage === 'en' 
+          ? 'Authentication failed. Please try again.' 
+          : 'Imeshindwa kuthibitisha. Tafadhali jaribu tena.' 
       })
-
-      if (response.success) {
-        localStorage.setItem('token', response.token)
-        localStorage.setItem('user', JSON.stringify(response.user))
-        localStorage.setItem('userRole', registerRole)
-        
-        showMessage(
-          currentLanguage === 'en' ? 'Account created successfully!' : 'Akaunti imeundwa kikamilifu!',
-          'success'
-        )
-        
-        setTimeout(() => {
-          if (registerRole === 'employer') {
-            router.push('/employer')
-          } else {
-            router.push('/dashboard')
-          }
-        }, 1000)
-      }
-    } catch (error) {
-      console.error('Registration error:', error);
-      showMessage(
-        currentLanguage === 'en' 
-          ? 'Registration failed. Please try again.' 
-          : 'Usajili umeshindwa. Tafadhali jaribu tena.',
-        'error'
-      )
     } finally {
       setLoading(false)
     }
   }
 
-  if (!mounted) {
-    return (
-      <div className="auth-container">
-        <div className="loading">
-          <div className="spinner"></div>
-          <p style={{ marginTop: '16px', color: 'white' }}>
-            {currentLanguage === 'en' ? 'Loading...' : 'Inapakia...'}
-          </p>
-        </div>
-      </div>
-    )
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    // Clear field error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }))
+    }
   }
 
   return (
     <div className="auth-container">
-      <div className="language-switcher" onClick={toggleLanguage}>
-        <span>{currentLanguage === 'en' ? '🇺🇸 English' : '🇰🇪 Kiswahili'}</span>
+      {/* Feature: Language Switcher */}
+      <div className="language-switcher">
+        <button onClick={toggleLanguage} className="language-btn">
+          {currentLanguage === 'en' ? '🇺🇸 English' : '🇰🇪 Kiswahili'}
+        </button>
       </div>
 
       <div className="auth-card">
         <div className="auth-header">
-          <h1>Kazi Mashinani</h1>
+          <div className="logo">
+            <i className="fas fa-hands-helping"></i>
+            <h1>Kazi Mashinani</h1>
+          </div>
           <p>
             {currentLanguage === 'en' 
               ? 'Connecting Rural Talent with Opportunities' 
-              : 'Kuunganisha Watalanta Vijijini na Fursa'
-            }
+              : 'Kuunganisha Talanta za Vijijini na Fursa'}
           </p>
         </div>
-        
+
+        {/* Feature: Tab Navigation */}
         <div className="auth-tabs">
-          <div 
+          <button 
             className={`auth-tab ${activeTab === 'login' ? 'active' : ''}`}
             onClick={() => setActiveTab('login')}
           >
             {currentLanguage === 'en' ? 'Login' : 'Ingia'}
-          </div>
-          <div 
+          </button>
+          <button 
             className={`auth-tab ${activeTab === 'register' ? 'active' : ''}`}
             onClick={() => setActiveTab('register')}
           >
             {currentLanguage === 'en' ? 'Register' : 'Jisajili'}
-          </div>
+          </button>
         </div>
-        
-        <div className="auth-content">
-          {message.text && (
-            <div className={`message ${message.type === 'error' ? 'message-error' : 'message-success'}`}>
-              {message.text}
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          {/* Feature: Role Selection for Registration */}
+          {activeTab === 'register' && (
+            <>
+              <div className="form-group">
+                <label>{currentLanguage === 'en' ? 'Full Name' : 'Jina Kamili'}</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  placeholder={currentLanguage === 'en' ? 'Enter your name' : 'Weka jina lako'}
+                  className={errors.name ? 'error' : ''}
+                />
+                {errors.name && <span className="error-text">{errors.name}</span>}
+              </div>
+
+              <div className="form-group">
+                <label>{currentLanguage === 'en' ? 'I am a' : 'Mimi ni'}</label>
+                <div className="role-selection">
+                  <button
+                    type="button"
+                    className={`role-btn ${formData.role === 'employee' ? 'active' : ''}`}
+                    onClick={() => handleInputChange('role', 'employee')}
+                  >
+                    <i className="fas fa-user"></i>
+                    {currentLanguage === 'en' ? 'Job Seeker' : 'Mtafuta Kazi'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`role-btn ${formData.role === 'employer' ? 'active' : ''}`}
+                    onClick={() => handleInputChange('role', 'employer')}
+                  >
+                    <i className="fas fa-briefcase"></i>
+                    {currentLanguage === 'en' ? 'Employer' : 'Mwajiri'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>{currentLanguage === 'en' ? 'Location' : 'Eneo'}</label>
+                <input
+                  type="text"
+                  value={formData.location}
+                  onChange={(e) => handleInputChange('location', e.target.value)}
+                  placeholder={currentLanguage === 'en' ? 'Enter your location' : 'Weka eneo lako'}
+                  className={errors.location ? 'error' : ''}
+                />
+                {errors.location && <span className="error-text">{errors.location}</span>}
+              </div>
+            </>
+          )}
+
+          <div className="form-group">
+            <label>{currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'}</label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => handleInputChange('phone', e.target.value)}
+              placeholder="07XXXXXXXX"
+              className={errors.phone ? 'error' : ''}
+            />
+            {errors.phone && <span className="error-text">{errors.phone}</span>}
+          </div>
+
+          <div className="form-group">
+            <label>{currentLanguage === 'en' ? 'Password' : 'Nenosiri'}</label>
+            <div className="password-input">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={formData.password}
+                onChange={(e) => handleInputChange('password', e.target.value)}
+                placeholder={currentLanguage === 'en' ? 'Enter password' : 'Weka nenosiri'}
+                className={errors.password ? 'error' : ''}
+              />
+              <button 
+                type="button" 
+                className="password-toggle"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+              </button>
+            </div>
+            {errors.password && <span className="error-text">{errors.password}</span>}
+          </div>
+
+          {activeTab === 'register' && (
+            <div className="form-group">
+              <label>{currentLanguage === 'en' ? 'Confirm Password' : 'Thibitisha Nenosiri'}</label>
+              <input
+                type="password"
+                value={formData.confirmPassword}
+                onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                placeholder={currentLanguage === 'en' ? 'Confirm your password' : 'Thibitisha nenosiri lako'}
+                className={errors.confirmPassword ? 'error' : ''}
+              />
+              {errors.confirmPassword && <span className="error-text">{errors.confirmPassword}</span>}
             </div>
           )}
 
-          {activeTab === 'login' && (
-            <form onSubmit={handleLogin}>
-              <div className="form-group">
-                <label className="form-label">
-                  {currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'}
-                </label>
-                <input
-                  type="tel"
-                  value={formData.loginPhone}
-                  onChange={(e) => handleInputChange('loginPhone', e.target.value)}
-                  className="form-control"
-                  placeholder="07XXXXXXXX"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">
-                  {currentLanguage === 'en' ? 'Password' : 'Nenosiri'}
-                </label>
-                <input
-                  type="password"
-                  value={formData.loginPassword}
-                  onChange={(e) => handleInputChange('loginPassword', e.target.value)}
-                  className="form-control"
-                  placeholder={currentLanguage === 'en' ? 'Enter your password' : 'Weka nenosiri lako'}
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn btn-primary btn-block"
-              >
-                {loading ? (
-                  <span className="loading-button">
-                    <div className="spinner-small"></div>
-                    {currentLanguage === 'en' ? 'Logging in...' : 'Inaingia...'}
-                  </span>
-                ) : (
-                  currentLanguage === 'en' ? 'Login' : 'Ingia'
-                )}
-              </button>
-            </form>
+          {errors.submit && (
+            <div className="error-message">
+              <i className="fas fa-exclamation-circle"></i>
+              {errors.submit}
+            </div>
           )}
 
-          {activeTab === 'register' && (
-            <form onSubmit={handleRegistration}>
-              <div className="form-group">
-                <label className="form-label">
-                  {currentLanguage === 'en' ? 'Full Name' : 'Jina Kamili'} *
-                </label>
-                <input
-                  type="text"
-                  value={formData.registerName}
-                  onChange={(e) => handleInputChange('registerName', e.target.value)}
-                  className="form-control"
-                  placeholder={currentLanguage === 'en' ? 'Enter your full name' : 'Weka jina lako kamili'}
-                  required
-                />
-              </div>
+          <button 
+            type="submit" 
+            className="btn btn-primary btn-block"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <div className="spinner-small"></div>
+                {currentLanguage === 'en' ? 'Processing...' : 'Inachakata...'}
+              </>
+            ) : (
+              currentLanguage === 'en' 
+                ? (activeTab === 'login' ? 'Sign In' : 'Create Account')
+                : (activeTab === 'login' ? 'Ingia' : 'Undi Akaunti')
+            )}
+          </button>
+        </form>
 
-              <div className="form-group">
-                <label className="form-label">
-                  {currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'} *
-                </label>
-                <input
-                  type="tel"
-                  value={formData.registerPhone}
-                  onChange={(e) => handleInputChange('registerPhone', e.target.value)}
-                  className="form-control"
-                  placeholder="07XXXXXXXX"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">
-                  {currentLanguage === 'en' ? 'Location' : 'Mahali Unapoishi'} *
-                </label>
-                <input
-                  type="text"
-                  value={formData.registerLocation}
-                  onChange={(e) => handleInputChange('registerLocation', e.target.value)}
-                  className="form-control"
-                  placeholder={currentLanguage === 'en' ? 'Enter your location' : 'Weka eneo lako'}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">
-                  {currentLanguage === 'en' ? 'Password' : 'Nenosiri'} *
-                </label>
-                <input
-                  type="password"
-                  value={formData.registerPassword}
-                  onChange={(e) => handleInputChange('registerPassword', e.target.value)}
-                  className="form-control"
-                  placeholder={currentLanguage === 'en' ? 'Create a password' : 'Tengeneza nenosiri'}
-                  required
-                  minLength="6"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">
-                  {currentLanguage === 'en' ? 'I am a' : 'Mimi ni'} *
-                </label>
-                <select
-                  value={formData.registerRole}
-                  onChange={(e) => handleInputChange('registerRole', e.target.value)}
-                  className="form-control"
-                  required
-                >
-                  <option value="employee">
-                    {currentLanguage === 'en' ? 'Job Seeker' : 'Mtafuta Kazi'}
-                  </option>
-                  <option value="employer">
-                    {currentLanguage === 'en' ? 'Employer' : 'Mwajiri'}
-                  </option>
-                </select>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn btn-primary btn-block"
-              >
-                {loading ? (
-                  <span className="loading-button">
-                    <div className="spinner-small"></div>
-                    {currentLanguage === 'en' ? 'Creating account...' : 'Inaunda akaunti...'}
-                  </span>
-                ) : (
-                  currentLanguage === 'en' ? 'Register' : 'Jisajili'
-                )}
-              </button>
-            </form>
-          )}
+        {/* Feature: Quick Help */}
+        <div className="auth-help">
+          <p>
+            {currentLanguage === 'en' 
+              ? 'Need help? Contact support: +254790528837' 
+              : 'Unahitaji usaidizi? Wasiliana na: +254790528837'}
+          </p>
         </div>
       </div>
     </div>
