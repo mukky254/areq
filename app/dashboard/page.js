@@ -1,9 +1,7 @@
-
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ApiService } from '../../lib/api'
-import { AppUtils } from '../../lib/utils'
+import { ApiService, AppUtils } from '../../lib/api'
 
 export default function DashboardPage() {
   const [user, setUser] = useState(null)
@@ -18,164 +16,151 @@ export default function DashboardPage() {
     name: '',
     phone: '',
     location: '',
-    skills: '',
-    experience: ''
+    skills: ''
   })
   const [sideNavOpen, setSideNavOpen] = useState(false)
-  const [notifications, setNotifications] = useState([])
-  const [unreadNotifications, setUnreadNotifications] = useState(0)
   
-  // Feature: Search and Filters
+  // Search and filter states
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedLocation, setSelectedLocation] = useState('')
   const [showFilters, setShowFilters] = useState(false)
-  
-  // Feature: Support System
-  const [supportMessage, setSupportMessage] = useState('')
-  const [showSupport, setShowSupport] = useState(false)
 
   const router = useRouter()
 
+  // Load initial data
   useEffect(() => {
-    loadDashboardData()
-  }, [])
+    const loadData = async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        const userData = typeof window !== 'undefined' ? localStorage.getItem('user') : null
+        
+        if (!token || !userData) {
+          router.push('/auth')
+          return
+        }
 
-  const loadDashboardData = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      const userData = localStorage.getItem('user')
-      
-      if (!token || !userData) {
-        router.push('/auth')
-        return
+        const user = JSON.parse(userData)
+        setUser(user)
+        setEditProfile({
+          name: user.name || '',
+          phone: user.phone || '',
+          location: user.location || '',
+          skills: user.skills || ''
+        })
+
+        // Load jobs, applications, and favorites
+        const jobsData = await ApiService.getJobs()
+        const appsData = await ApiService.getMyApplications()
+        const favsData = await ApiService.getFavorites(user._id)
+
+        if (jobsData.success) {
+          setJobs(jobsData.jobs)
+          setFilteredJobs(jobsData.jobs)
+        }
+        if (appsData.success) setApplications(appsData.applications)
+        if (favsData.success) setFavorites(favsData.favorites)
+
+      } catch (error) {
+        console.error('Error loading data:', error)
+      } finally {
+        setLoading(false)
       }
-
-      const user = JSON.parse(userData)
-      setUser(user)
-      setEditProfile({
-        name: user.name || '',
-        phone: user.phone || '',
-        location: user.location || '',
-        skills: user.skills || '',
-        experience: user.experience || ''
-      })
-
-      // Load all data
-      const [jobsResponse, applicationsResponse, favoritesResponse] = await Promise.all([
-        ApiService.getJobs(),
-        ApiService.getMyApplications(),
-        ApiService.getFavorites(user._id)
-      ])
-
-      if (jobsResponse.success) {
-        setJobs(jobsResponse.jobs || [])
-        setFilteredJobs(jobsResponse.jobs || [])
-      }
-      if (applicationsResponse.success) setApplications(applicationsResponse.applications || [])
-      if (favoritesResponse.success) setFavorites(favoritesResponse.favorites || [])
-
-      // Load notifications
-      const savedNotifications = AppUtils.getNotifications()
-      setNotifications(savedNotifications)
-      setUnreadNotifications(savedNotifications.filter(n => !n.read).length)
-
-    } catch (error) {
-      console.error('Error loading dashboard data:', error)
-    } finally {
-      setLoading(false)
     }
-  }
 
-  // Feature 1: Advanced Search & Filtering
+    loadData()
+  }, [router])
+
+  // Apply search and filters
   useEffect(() => {
-    const filters = { searchQuery, category: selectedCategory, location: selectedLocation }
-    const filtered = AppUtils.filterJobs(jobs, filters)
+    const filtered = AppUtils.filterJobs(jobs, {
+      searchQuery,
+      category: selectedCategory,
+      location: selectedLocation
+    })
     setFilteredJobs(filtered)
   }, [searchQuery, selectedCategory, selectedLocation, jobs])
 
+  // Feature 1: Advanced Search & Filtering
+  const handleSearch = (e) => {
+    setSearchQuery(e.target.value)
+  }
+
   // Feature 2: Smart Job Matching
-  const matchingJobs = AppUtils.getMatchingJobs(filteredJobs, user?.skills)
+  const getMatchingJobs = () => {
+    if (!user?.skills) return filteredJobs
+    const userSkills = user.skills.toLowerCase().split(',')
+    return filteredJobs.filter(job => {
+      if (!job.skills) return false
+      const jobSkills = job.skills.map(s => s.toLowerCase())
+      return userSkills.some(userSkill => 
+        jobSkills.some(jobSkill => jobSkill.includes(userSkill))
+      )
+    })
+  }
 
   // Feature 3: Quick Apply
   const quickApply = async (jobId) => {
+    if (!user) return
+    
     try {
       const response = await ApiService.applyForJob(jobId, {
         applicantId: user._id,
         applicantName: user.name,
         applicantPhone: user.phone,
         coverLetter: currentLanguage === 'en' 
-          ? 'I am interested in this job opportunity.' 
-          : 'Nina hamu ya kufanya kazi hii.'
+          ? 'I am interested in this job' 
+          : 'Nina hamu ya kufanya kazi hii'
       })
 
       if (response.success) {
         const job = jobs.find(j => j._id === jobId)
-        const application = {
+        const newApplication = {
           ...response.application,
           jobTitle: job?.title,
-          employer: job?.employer?.name || 'Mwajiri'
+          employer: job?.employer?.name || 'Employer'
         }
-
-        setApplications(prev => [...prev, application])
-        AppUtils.addNotification(
-          currentLanguage === 'en' 
-            ? `Application sent for ${job?.title}` 
-            : `Ombi limewasilishwa kwa ${job?.title}`,
-          'success'
-        )
-        loadDashboardData() // Refresh data
+        setApplications(prev => [...prev, newApplication])
+        
+        alert(currentLanguage === 'en' ? 'Application sent!' : 'Ombi limewasilishwa!')
       }
     } catch (error) {
-      console.error('Error applying for job:', error)
-      AppUtils.addNotification(
-        currentLanguage === 'en' ? 'Failed to submit application' : 'Imeshindwa kutuma ombi',
-        'error'
-      )
+      console.error('Apply error:', error)
+      alert(currentLanguage === 'en' ? 'Failed to apply' : 'Imeshindwa kuomba')
     }
   }
 
   // Feature 4: Enhanced Favorites
   const toggleFavorite = async (jobId) => {
+    if (!user) return
+    
     try {
       const isFavorite = favorites.some(fav => fav.jobId === jobId)
       
       if (isFavorite) {
         await ApiService.removeFavorite(jobId, user._id)
         setFavorites(prev => prev.filter(fav => fav.jobId !== jobId))
-        AppUtils.addNotification(
-          currentLanguage === 'en' ? 'Removed from favorites' : 'Imeondolewa kwenye vipendwa',
-          'info'
-        )
       } else {
         await ApiService.saveFavorite(jobId, user._id)
-        setFavorites(prev => [...prev, { jobId, userId: user._id, _id: 'fav-' + Date.now() }])
-        AppUtils.addNotification(
-          currentLanguage === 'en' ? 'Added to favorites' : 'Imeongezwa kwenye vipendwa',
-          'success'
-        )
+        setFavorites(prev => [...prev, { jobId, userId: user._id }])
       }
-      loadDashboardData() // Refresh favorites
     } catch (error) {
-      console.error('Error toggling favorite:', error)
+      console.error('Favorite error:', error)
     }
   }
 
   // Feature 5: Job Sharing
   const shareJob = (job) => {
-    const jobText = `${job.title}\n📍 ${job.location}\n📞 ${job.phone}\n\n${job.description}`
+    const text = `${job.title} - ${job.location}\n${job.description}\nContact: ${job.phone}`
     
-    if (navigator.share) {
+    if (typeof navigator !== 'undefined' && navigator.share) {
       navigator.share({
         title: job.title,
-        text: jobText,
+        text: text
       })
-    } else {
-      navigator.clipboard.writeText(jobText)
-      AppUtils.addNotification(
-        currentLanguage === 'en' ? 'Job details copied!' : 'Maelezo yameigwa!',
-        'success'
-      )
+    } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text)
+      alert(currentLanguage === 'en' ? 'Copied to clipboard!' : 'Imeigwa kwenye clipboard!')
     }
   }
 
@@ -188,50 +173,16 @@ export default function DashboardPage() {
   // Feature 7: Profile Completeness
   const profileCompleteness = AppUtils.calculateProfileCompleteness(user)
 
-  // Feature 8: Recent Activity Feed
-  const recentActivities = AppUtils.getRecentActivities(applications, favorites, jobs, currentLanguage)
-
-  // Feature 9: Support System
-  const submitSupportRequest = async () => {
-    if (!supportMessage.trim()) return
-
-    try {
-      const response = await ApiService.contactSupport({
-        userId: user._id,
-        userName: user.name,
-        message: supportMessage,
-        type: 'general'
-      })
-
-      if (response.success) {
-        setSupportMessage('')
-        setShowSupport(false)
-        AppUtils.addNotification(
-          currentLanguage === 'en' ? 'Support request sent' : 'Ombi la usaidizi limetumwa',
-          'success'
-        )
-      }
-    } catch (error) {
-      console.error('Error submitting support request:', error)
-      AppUtils.addNotification(
-        currentLanguage === 'en' ? 'Failed to send support request' : 'Imeshindwa kutuma ombi la usaidizi',
-        'error'
-      )
-    }
-  }
-
-  // Feature 10: Language Persistence
+  // Feature 8: Language Persistence
   const toggleLanguage = () => {
     const newLanguage = currentLanguage === 'en' ? 'sw' : 'en'
     setCurrentLanguage(newLanguage)
-    localStorage.setItem('preferredLanguage', newLanguage)
-    AppUtils.addNotification(
-      newLanguage === 'en' ? 'Language changed to English' : 'Lugha imebadilishwa kuwa Kiswahili',
-      'info'
-    )
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('preferredLanguage', newLanguage)
+    }
   }
 
-  // Feature 11: Data Export
+  // Feature 9: Data Export
   const exportData = (type) => {
     let data, filename
     
@@ -239,21 +190,13 @@ export default function DashboardPage() {
       data = applications
       filename = 'my-applications.json'
     } else if (type === 'favorites') {
-      data = favorites.map(fav => {
-        const job = jobs.find(j => j._id === fav.jobId)
-        return job ? { ...job, savedDate: fav._id } : null
-      }).filter(Boolean)
+      data = favorites
       filename = 'my-favorites.json'
     } else {
-      data = { user, applications, favorites }
-      filename = 'my-data.json'
+      return
     }
     
     AppUtils.exportData(data, filename)
-    AppUtils.addNotification(
-      currentLanguage === 'en' ? 'Data exported successfully' : 'Data imepakuliwa',
-      'success'
-    )
   }
 
   const handleUpdateProfile = async (e) => {
@@ -262,38 +205,34 @@ export default function DashboardPage() {
       const response = await ApiService.updateProfile(editProfile)
       if (response.success) {
         setUser(response.user)
-        localStorage.setItem('user', JSON.stringify(response.user))
-        AppUtils.addNotification(
-          currentLanguage === 'en' ? 'Profile updated successfully' : 'Wasifu umehakikishwa',
-          'success'
-        )
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('user', JSON.stringify(response.user))
+        }
+        alert(currentLanguage === 'en' ? 'Profile updated!' : 'Wasifu umehakikishwa!')
       }
     } catch (error) {
-      console.error('Error updating profile:', error)
-      AppUtils.addNotification(
-        currentLanguage === 'en' ? 'Failed to update profile' : 'Imeshindwa kusasisha wasifu',
-        'error'
-      )
+      console.error('Profile update error:', error)
+      alert(currentLanguage === 'en' ? 'Update failed' : 'Imeshindwa kusasisha')
     }
   }
 
   const logout = () => {
-    if (confirm(currentLanguage === 'en' ? 'Are you sure you want to logout?' : 'Una uhakika unataka kutoka?')) {
-      localStorage.clear()
+    if (confirm(currentLanguage === 'en' ? 'Logout?' : 'Toka?')) {
+      if (typeof window !== 'undefined') {
+        localStorage.clear()
+      }
       router.push('/auth')
     }
   }
 
-  const openSideNav = () => setSideNavOpen(true)
-  const closeSideNav = () => setSideNavOpen(false)
-
-  // Feature 12: Clear Filters
   const clearFilters = () => {
     setSearchQuery('')
     setSelectedCategory('all')
     setSelectedLocation('')
     setShowFilters(false)
   }
+
+  const matchingJobs = getMatchingJobs()
 
   if (loading) {
     return (
@@ -304,9 +243,13 @@ export default function DashboardPage() {
     )
   }
 
+  if (!user) {
+    return null
+  }
+
   return (
     <div className="dashboard">
-      {/* Header with Enhanced Features */}
+      {/* Header */}
       <header className="header">
         <div className="container">
           <div className="header-content">
@@ -316,32 +259,14 @@ export default function DashboardPage() {
             </div>
             
             <div className="user-menu">
-              {/* Feature 13: Notification Bell */}
-              <div className="notification-bell">
-                <button 
-                  onClick={() => setActiveSection('notifications')}
-                  className="icon-btn"
-                >
-                  <i className="fas fa-bell"></i>
-                  {unreadNotifications > 0 && (
-                    <span className="notification-badge">{unreadNotifications}</span>
-                  )}
-                </button>
-              </div>
-
               <button onClick={toggleLanguage} className="language-btn">
                 {currentLanguage === 'en' ? 'EN' : 'SW'}
               </button>
               
-              {/* Feature 14: Quick Support Access */}
               <button 
-                onClick={() => setShowSupport(true)}
-                className="support-btn"
+                className="menu-btn"
+                onClick={() => setSideNavOpen(true)}
               >
-                <i className="fas fa-question-circle"></i>
-              </button>
-
-              <button className="menu-btn" onClick={openSideNav}>
                 <i className="fas fa-bars"></i>
               </button>
             </div>
@@ -349,43 +274,44 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Enhanced Side Navigation */}
-      <div className={`overlay ${sideNavOpen ? 'show' : ''}`} onClick={closeSideNav}></div>
+      {/* Side Navigation */}
+      {sideNavOpen && (
+        <div className="overlay show" onClick={() => setSideNavOpen(false)}></div>
+      )}
       
       <div className={`side-nav ${sideNavOpen ? 'open' : ''}`}>
         <div className="side-nav-header">
-          <h3>{currentLanguage === 'en' ? 'Quick Links' : 'Viungo vya Haraka'}</h3>
-          <button className="close-btn" onClick={closeSideNav}>
+          <h3>{currentLanguage === 'en' ? 'Menu' : 'Menyu'}</h3>
+          <button className="close-btn" onClick={() => setSideNavOpen(false)}>
             <i className="fas fa-times"></i>
           </button>
         </div>
         
         <div className="side-nav-content">
-          <a href="/blog" className="side-nav-item" onClick={closeSideNav}>
+          <a href="/blog" className="side-nav-item" onClick={() => setSideNavOpen(false)}>
             <i className="fas fa-info-circle"></i>
             <span>{currentLanguage === 'en' ? 'About' : 'Kuhusu'}</span>
           </a>
           
-          <a href="tel:+254790528837" className="side-nav-item" onClick={closeSideNav}>
+          <a href="tel:+254790528837" className="side-nav-item" onClick={() => setSideNavOpen(false)}>
             <i className="fas fa-phone"></i>
-            <span>{currentLanguage === 'en' ? 'Call Us' : 'Tupe Simu'}</span>
+            <span>{currentLanguage === 'en' ? 'Call' : 'Piga Simu'}</span>
           </a>
           
-          <a href="mailto:myhassan19036@gmail.com" className="side-nav-item" onClick={closeSideNav}>
+          <a href="mailto:myhassan19036@gmail.com" className="side-nav-item" onClick={() => setSideNavOpen(false)}>
             <i className="fas fa-envelope"></i>
-            <span>{currentLanguage === 'en' ? 'Email' : 'Barua Pepe'}</span>
+            <span>Email</span>
           </a>
 
-          {/* Feature 15: Data Export in Side Nav */}
           <div className="side-nav-section">
-            <h4>{currentLanguage === 'en' ? 'Export Data' : 'Pakua Data'}</h4>
+            <h4>{currentLanguage === 'en' ? 'Export' : 'Pakua'}</h4>
             <button onClick={() => exportData('applications')} className="side-nav-item">
               <i className="fas fa-download"></i>
-              <span>{currentLanguage === 'en' ? 'My Applications' : 'Maombi Yangu'}</span>
+              <span>{currentLanguage === 'en' ? 'Applications' : 'Maombi'}</span>
             </button>
             <button onClick={() => exportData('favorites')} className="side-nav-item">
               <i className="fas fa-download"></i>
-              <span>{currentLanguage === 'en' ? 'My Favorites' : 'Vipendwa'}</span>
+              <span>{currentLanguage === 'en' ? 'Favorites' : 'Vipendwa'}</span>
             </button>
           </div>
 
@@ -396,79 +322,36 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Support Modal */}
-      {showSupport && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <h3>{currentLanguage === 'en' ? 'Get Help' : 'Pata Usaidizi'}</h3>
-              <button onClick={() => setShowSupport(false)} className="close-btn">
-                <i className="fas fa-times"></i>
-              </button>
-            </div>
-            <div className="modal-body">
-              <textarea
-                value={supportMessage}
-                onChange={(e) => setSupportMessage(e.target.value)}
-                placeholder={currentLanguage === 'en' 
-                  ? 'Describe your issue...' 
-                  : 'Eleza tatizo lako...'}
-                rows="4"
-              />
-              <div className="modal-actions">
-                <button onClick={submitSupportRequest} className="btn btn-primary">
-                  {currentLanguage === 'en' ? 'Send' : 'Tuma'}
-                </button>
-                <button onClick={() => setShowSupport(false)} className="btn btn-secondary">
-                  {currentLanguage === 'en' ? 'Cancel' : 'Ghairi'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Main Content */}
       <main className="main-content">
         <div className="container">
           {/* Home Section */}
           {activeSection === 'home' && (
             <div>
-              {/* Feature 16: Welcome Card with Profile Completeness */}
               <div className="card welcome-card">
                 <div className="card-header">
-                  <div className="welcome-content">
-                    <h1>{currentLanguage === 'en' ? 'Welcome, ' : 'Karibu, '}{user?.name}!</h1>
-                    <p>{currentLanguage === 'en' 
-                      ? 'Your job search journey starts here' 
-                      : 'Safari yako ya kutafuta kazi inaanza hapa'}</p>
-                    
-                    {/* Profile Completeness */}
-                    <div className="profile-completeness">
-                      <div className="completeness-header">
-                        <span>{currentLanguage === 'en' ? 'Profile Completeness' : 'Ukamilifu wa Wasifu'}</span>
-                        <span>{profileCompleteness}%</span>
-                      </div>
-                      <div className="progress-bar">
-                        <div 
-                          className="progress-fill" 
-                          style={{ width: `${profileCompleteness}%` }}
-                        ></div>
-                      </div>
-                      {profileCompleteness < 100 && (
-                        <button 
-                          onClick={() => setActiveSection('profile')}
-                          className="btn-link"
-                        >
-                          {currentLanguage === 'en' ? 'Complete your profile' : 'Kamilisha wasifu wako'}
-                        </button>
-                      )}
+                  <h1>{currentLanguage === 'en' ? 'Welcome, ' : 'Karibu, '}{user.name}!</h1>
+                  <p>{currentLanguage === 'en' 
+                    ? 'Find your next opportunity' 
+                    : 'Tafuta fursa yako ijayo'}</p>
+                  
+                  {/* Profile Completeness */}
+                  <div className="profile-completeness">
+                    <div className="completeness-header">
+                      <span>{currentLanguage === 'en' ? 'Profile Complete' : 'Wasifu Kamili'}</span>
+                      <span>{profileCompleteness}%</span>
+                    </div>
+                    <div className="progress-bar">
+                      <div 
+                        className="progress-fill" 
+                        style={{ width: `${profileCompleteness}%` }}
+                      ></div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Feature 17: Stats Overview */}
+              {/* Stats Overview */}
               <div className="stats-grid">
                 <div className="stat-card">
                   <div className="stat-icon primary">
@@ -476,7 +359,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="stat-content">
                     <h3>{jobs.length}</h3>
-                    <p>{currentLanguage === 'en' ? 'Available Jobs' : 'Kazi Zilizopo'}</p>
+                    <p>{currentLanguage === 'en' ? 'Jobs' : 'Kazi'}</p>
                   </div>
                 </div>
                 <div className="stat-card">
@@ -499,44 +382,7 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Feature 18: Recent Activity */}
-              <div className="card">
-                <div className="card-header">
-                  <h3>{currentLanguage === 'en' ? 'Recent Activity' : 'Shughuli za Hivi Karibuni'}</h3>
-                </div>
-                <div className="card-body">
-                  {recentActivities.length > 0 ? (
-                    <div className="activity-list">
-                      {recentActivities.map((activity, index) => (
-                        <div key={index} className="activity-item">
-                          <div className="activity-icon">
-                            <i className={`fas ${
-                              activity.type === 'application' ? 'fa-paper-plane' : 'fa-heart'
-                            }`}></i>
-                          </div>
-                          <div className="activity-content">
-                            <p>{activity.message}</p>
-                            <small>{new Date(activity.date).toLocaleDateString()}</small>
-                          </div>
-                          {activity.status && (
-                            <span className={`activity-status ${activity.status}`}>
-                              {activity.status}
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-muted">
-                      {currentLanguage === 'en' 
-                        ? 'No recent activity' 
-                        : 'Hakuna shughuli za hivi karibuni'}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Feature 19: Quick Actions */}
+              {/* Quick Actions */}
               <div className="card">
                 <div className="card-header">
                   <h3>{currentLanguage === 'en' ? 'Quick Actions' : 'Vitendo vya Haraka'}</h3>
@@ -545,15 +391,11 @@ export default function DashboardPage() {
                   <div className="quick-actions">
                     <button onClick={() => setActiveSection('jobs')} className="quick-action-btn">
                       <i className="fas fa-search"></i>
-                      <span>{currentLanguage === 'en' ? 'Browse Jobs' : 'Tafuta Kazi'}</span>
+                      <span>{currentLanguage === 'en' ? 'Find Jobs' : 'Tafuta Kazi'}</span>
                     </button>
                     <button onClick={() => setActiveSection('profile')} className="quick-action-btn">
                       <i className="fas fa-user-edit"></i>
                       <span>{currentLanguage === 'en' ? 'Update Profile' : 'Sasisha Wasifu'}</span>
-                    </button>
-                    <button onClick={() => exportData('applications')} className="quick-action-btn">
-                      <i className="fas fa-download"></i>
-                      <span>{currentLanguage === 'en' ? 'Export Data' : 'Pakua Data'}</span>
                     </button>
                   </div>
                 </div>
@@ -561,10 +403,10 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Jobs Section with All Features */}
+          {/* Jobs Section */}
           {activeSection === 'jobs' && (
             <div>
-              {/* Feature 20: Advanced Search Header */}
+              {/* Search Header */}
               <div className="card search-header">
                 <div className="card-body">
                   <div className="search-container">
@@ -573,17 +415,10 @@ export default function DashboardPage() {
                       <input
                         type="text"
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder={currentLanguage === 'en' 
-                          ? 'Search jobs...' 
-                          : 'Tafuta kazi...'}
+                        onChange={handleSearch}
+                        placeholder={currentLanguage === 'en' ? 'Search jobs...' : 'Tafuta kazi...'}
                         className="search-input"
                       />
-                      {searchQuery && (
-                        <button onClick={() => setSearchQuery('')} className="clear-search">
-                          <i className="fas fa-times"></i>
-                        </button>
-                      )}
                     </div>
                     
                     <button 
@@ -595,21 +430,19 @@ export default function DashboardPage() {
                     </button>
                   </div>
 
-                  {/* Feature 21: Advanced Filters */}
+                  {/* Filters Panel */}
                   {showFilters && (
                     <div className="filters-panel">
                       <div className="filter-group">
-                        <label>{currentLanguage === 'en' ? 'Category' : 'Aina ya Kazi'}</label>
+                        <label>{currentLanguage === 'en' ? 'Category' : 'Aina'}</label>
                         <select
                           value={selectedCategory}
                           onChange={(e) => setSelectedCategory(e.target.value)}
                         >
-                          <option value="all">{currentLanguage === 'en' ? 'All Categories' : 'Aina Zote'}</option>
+                          <option value="all">{currentLanguage === 'en' ? 'All' : 'Zote'}</option>
                           <option value="kilimo">{currentLanguage === 'en' ? 'Agriculture' : 'Kilimo'}</option>
                           <option value="ujenzi">{currentLanguage === 'en' ? 'Construction' : 'Ujenzi'}</option>
                           <option value="nyumbani">{currentLanguage === 'en' ? 'Domestic' : 'Nyumbani'}</option>
-                          <option value="usafiri">{currentLanguage === 'en' ? 'Transport' : 'Usafiri'}</option>
-                          <option value="huduma">{currentLanguage === 'en' ? 'Services' : 'Huduma'}</option>
                         </select>
                       </div>
                       
@@ -619,7 +452,7 @@ export default function DashboardPage() {
                           type="text"
                           value={selectedLocation}
                           onChange={(e) => setSelectedLocation(e.target.value)}
-                          placeholder={currentLanguage === 'en' ? 'Enter location...' : 'Weka eneo...'}
+                          placeholder={currentLanguage === 'en' ? 'Location...' : 'Eneo...'}
                         />
                       </div>
 
@@ -627,56 +460,40 @@ export default function DashboardPage() {
                         <button onClick={clearFilters} className="btn btn-outline">
                           {currentLanguage === 'en' ? 'Clear' : 'Futa'}
                         </button>
-                        <button onClick={() => setShowFilters(false)} className="btn btn-primary">
-                          {currentLanguage === 'en' ? 'Apply' : 'Tumia'}
-                        </button>
                       </div>
                     </div>
                   )}
 
-                  {/* Feature 22: Search Results Info */}
                   <div className="search-results-info">
                     <p>
                       {currentLanguage === 'en' 
-                        ? `Showing ${filteredJobs.length} of ${jobs.length} jobs` 
-                        : `Inaonyesha ${filteredJobs.length} kati ya ${jobs.length} kazi`}
-                      
-                      {(searchQuery || selectedCategory !== 'all' || selectedLocation) && (
-                        <button onClick={clearFilters} className="btn-link">
-                          {currentLanguage === 'en' ? 'Clear all filters' : 'Futa vyochujio vyote'}
-                        </button>
-                      )}
+                        ? `Found ${filteredJobs.length} jobs` 
+                        : `Imepata kazi ${filteredJobs.length}`}
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Feature 23: Smart Job Matching Banner */}
+              {/* Smart Matching Banner */}
               {matchingJobs.length > 0 && matchingJobs.length < filteredJobs.length && (
                 <div className="card matching-banner">
                   <div className="card-body">
                     <div className="banner-content">
                       <i className="fas fa-lightbulb"></i>
                       <div>
-                        <h4>{currentLanguage === 'en' ? 'Jobs Matching Your Skills' : 'Kazi Zinalingana na Ujuzi Wako'}</h4>
+                        <h4>{currentLanguage === 'en' ? 'Matching Jobs' : 'Kazi Zinalingana'}</h4>
                         <p>
                           {currentLanguage === 'en' 
-                            ? `We found ${matchingJobs.length} jobs that match your skills` 
-                            : `Tumepata ${matchingJobs.length} kazi zinazolingana na ujuzi wako`}
+                            ? `${matchingJobs.length} jobs match your skills` 
+                            : `Kazi ${matchingJobs.length} zinalingana na ujuzi wako`}
                         </p>
                       </div>
-                      <button 
-                        onClick={() => setFilteredJobs(matchingJobs)}
-                        className="btn btn-primary"
-                      >
-                        {currentLanguage === 'en' ? 'Show Matching Jobs' : 'Onyesha Kazi Zinalingana'}
-                      </button>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Enhanced Jobs List */}
+              {/* Jobs List */}
               <div className="jobs-list">
                 {filteredJobs.map(job => {
                   const isFavorite = favorites.some(fav => fav.jobId === job._id)
@@ -689,9 +506,6 @@ export default function DashboardPage() {
                           <h3>{job.title}</h3>
                           <div className="job-meta">
                             <span className="category-badge">{job.category}</span>
-                            {job.urgent && <span className="urgent-badge">
-                              {currentLanguage === 'en' ? 'Urgent' : 'Ya Haraka'}
-                            </span>}
                           </div>
                         </div>
                         <div className="job-actions">
@@ -729,24 +543,16 @@ export default function DashboardPage() {
                             </div>
                           )}
                         </div>
-
-                        {job.skills && (
-                          <div className="job-skills">
-                            {job.skills.map((skill, index) => (
-                              <span key={index} className="skill-tag">{skill}</span>
-                            ))}
-                          </div>
-                        )}
                       </div>
 
                       <div className="job-footer">
                         <div className="job-contact">
                           <a href={`tel:${job.phone}`} className="btn btn-primary">
                             <i className="fas fa-phone"></i>
-                            {currentLanguage === 'en' ? 'Call Now' : 'Piga Sasa'}
+                            {currentLanguage === 'en' ? 'Call' : 'Piga'}
                           </a>
                           
-                          {/* Feature 24: Smart Apply Button */}
+                          {/* Smart Apply Button */}
                           <button
                             onClick={() => quickApply(job._id)}
                             className={`btn ${
@@ -758,7 +564,7 @@ export default function DashboardPage() {
                           >
                             <i className="fas fa-paper-plane"></i>
                             {applicationStatus === 'not_applied' 
-                              ? (currentLanguage === 'en' ? 'Quick Apply' : 'Omba Haraka')
+                              ? (currentLanguage === 'en' ? 'Apply' : 'Omba')
                               : applicationStatus === 'pending' 
                                 ? (currentLanguage === 'en' ? 'Pending' : 'Inasubiri')
                                 : applicationStatus === 'accepted'
@@ -775,8 +581,111 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Other sections (Applications, Profile, Notifications) would continue here... */}
-          
+          {/* Applications Section */}
+          {activeSection === 'applications' && (
+            <div className="card">
+              <div className="card-body">
+                <h2>
+                  <i className="fas fa-file-alt"></i> 
+                  {currentLanguage === 'en' ? 'My Applications' : 'Maombi Yangu'} 
+                  ({applications.length})
+                </h2>
+                
+                {applications.length > 0 ? (
+                  <div className="applications-list">
+                    {applications.map(application => (
+                      <div key={application._id} className="application-item">
+                        <div className="app-header">
+                          <h4>{application.jobTitle}</h4>
+                          <span className={`status ${application.status}`}>
+                            {application.status === 'pending' ? (currentLanguage === 'en' ? 'Pending' : 'Inasubiri') :
+                             application.status === 'accepted' ? (currentLanguage === 'en' ? 'Accepted' : 'Imekubaliwa') :
+                             (currentLanguage === 'en' ? 'Rejected' : 'Imekataliwa')}
+                          </span>
+                        </div>
+                        <p>{currentLanguage === 'en' ? 'Employer' : 'Mwajiri'}: {application.employer}</p>
+                        <small>{new Date(application.appliedDate).toLocaleDateString()}</small>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty-state">
+                    <i className="fas fa-file-alt"></i>
+                    <h3>{currentLanguage === 'en' ? 'No Applications' : 'Hakuna Maombi'}</h3>
+                    <button 
+                      onClick={() => setActiveSection('jobs')}
+                      className="btn btn-primary"
+                    >
+                      {currentLanguage === 'en' ? 'Find Jobs' : 'Tafuta Kazi'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Profile Section */}
+          {activeSection === 'profile' && user && (
+            <div className="card">
+              <div className="card-body">
+                <div className="profile-header">
+                  <div className="user-avatar">
+                    {user.name?.charAt(0)?.toUpperCase() || 'U'}
+                  </div>
+                  <div>
+                    <h2>{user.name}</h2>
+                    <p>{user.location}</p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleUpdateProfile}>
+                  <div className="form-group">
+                    <label>{currentLanguage === 'en' ? 'Full Name' : 'Jina Kamili'}</label>
+                    <input
+                      type="text"
+                      value={editProfile.name}
+                      onChange={(e) => setEditProfile(prev => ({ ...prev, name: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  
+                  <div className="form-group">
+                    <label>{currentLanguage === 'en' ? 'Phone' : 'Simu'}</label>
+                    <input
+                      type="tel"
+                      value={editProfile.phone}
+                      onChange={(e) => setEditProfile(prev => ({ ...prev, phone: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  
+                  <div className="form-group">
+                    <label>{currentLanguage === 'en' ? 'Location' : 'Eneo'}</label>
+                    <input
+                      type="text"
+                      value={editProfile.location}
+                      onChange={(e) => setEditProfile(prev => ({ ...prev, location: e.target.value }))}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>{currentLanguage === 'en' ? 'Skills' : 'Ujuzi'}</label>
+                    <input
+                      type="text"
+                      value={editProfile.skills}
+                      onChange={(e) => setEditProfile(prev => ({ ...prev, skills: e.target.value }))}
+                      placeholder={currentLanguage === 'en' ? 'e.g. farming, construction' : 'K.m. kilimo, ujenzi'}
+                    />
+                  </div>
+
+                  <button type="submit" className="btn btn-primary">
+                    {currentLanguage === 'en' ? 'Save Changes' : 'Hifadhi'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
