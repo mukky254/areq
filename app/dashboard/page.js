@@ -1,140 +1,80 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ApiService, AppUtils } from '../../lib/api'
+import { ApiService } from '../../lib/api'
 
 export default function DashboardPage() {
   const [user, setUser] = useState(null)
+  const [userRole, setUserRole] = useState('employee')
   const [currentLanguage, setCurrentLanguage] = useState('sw')
   const [activeSection, setActiveSection] = useState('home')
   const [jobs, setJobs] = useState([])
-  const [filteredJobs, setFilteredJobs] = useState([])
   const [favorites, setFavorites] = useState([])
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
+  const [mounted, setMounted] = useState(false)
   const [editProfile, setEditProfile] = useState({
     name: '',
     phone: '',
-    location: '',
-    skills: ''
+    location: ''
   })
   const [sideNavOpen, setSideNavOpen] = useState(false)
-  
-  // Search and filter states
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('all')
-  const [selectedLocation, setSelectedLocation] = useState('')
-  const [showFilters, setShowFilters] = useState(false)
-
   const router = useRouter()
 
-  // Load initial data
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-        const userData = typeof window !== 'undefined' ? localStorage.getItem('user') : null
-        
-        if (!token || !userData) {
-          router.push('/auth')
-          return
-        }
+    setMounted(true)
+    loadDashboardData()
+  }, [])
 
-        const user = JSON.parse(userData)
-        setUser(user)
-        setEditProfile({
-          name: user.name || '',
-          phone: user.phone || '',
-          location: user.location || '',
-          skills: user.skills || ''
-        })
-
-        // Load jobs, applications, and favorites
-        const jobsData = await ApiService.getJobs()
-        const appsData = await ApiService.getMyApplications()
-        const favsData = await ApiService.getFavorites(user._id)
-
-        if (jobsData.success) {
-          setJobs(jobsData.jobs)
-          setFilteredJobs(jobsData.jobs)
-        }
-        if (appsData.success) setApplications(appsData.applications)
-        if (favsData.success) setFavorites(favsData.favorites)
-
-      } catch (error) {
-        console.error('Error loading data:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadData()
-  }, [router])
-
-  // Apply search and filters
-  useEffect(() => {
-    const filtered = AppUtils.filterJobs(jobs, {
-      searchQuery,
-      category: selectedCategory,
-      location: selectedLocation
-    })
-    setFilteredJobs(filtered)
-  }, [searchQuery, selectedCategory, selectedLocation, jobs])
-
-  // Feature 1: Advanced Search & Filtering
-  const handleSearch = (e) => {
-    setSearchQuery(e.target.value)
-  }
-
-  // Feature 2: Smart Job Matching
-  const getMatchingJobs = () => {
-    if (!user?.skills) return filteredJobs
-    const userSkills = user.skills.toLowerCase().split(',')
-    return filteredJobs.filter(job => {
-      if (!job.skills) return false
-      const jobSkills = job.skills.map(s => s.toLowerCase())
-      return userSkills.some(userSkill => 
-        jobSkills.some(jobSkill => jobSkill.includes(userSkill))
-      )
-    })
-  }
-
-  // Feature 3: Quick Apply
-  const quickApply = async (jobId) => {
-    if (!user) return
-    
+  const loadDashboardData = async () => {
     try {
-      const response = await ApiService.applyForJob(jobId, {
-        applicantId: user._id,
-        applicantName: user.name,
-        applicantPhone: user.phone,
-        coverLetter: currentLanguage === 'en' 
-          ? 'I am interested in this job' 
-          : 'Nina hamu ya kufanya kazi hii'
+      const token = localStorage.getItem('token')
+      const userData = localStorage.getItem('user')
+      
+      if (!token || !userData) {
+        router.push('/auth')
+        return
+      }
+
+      const user = JSON.parse(userData)
+      setUser(user)
+      setUserRole(user.role)
+      setEditProfile({
+        name: user.name || '',
+        phone: user.phone || '',
+        location: user.location || ''
       })
 
-      if (response.success) {
-        const job = jobs.find(j => j._id === jobId)
-        const newApplication = {
-          ...response.application,
-          jobTitle: job?.title,
-          employer: job?.employer?.name || 'Employer'
-        }
-        setApplications(prev => [...prev, newApplication])
-        
-        alert(currentLanguage === 'en' ? 'Application sent!' : 'Ombi limewasilishwa!')
+      const jobsResponse = await ApiService.getJobs()
+      if (jobsResponse.success) {
+        setJobs(jobsResponse.jobs || [])
       }
+
+      const applicationsResponse = await ApiService.getMyApplications()
+      if (applicationsResponse.success) {
+        setApplications(applicationsResponse.applications || [])
+      }
+
+      const favoritesResponse = await ApiService.getFavorites(user._id)
+      if (favoritesResponse.success) {
+        setFavorites(favoritesResponse.favorites || [])
+      }
+
+      const savedLanguage = localStorage.getItem('preferredLanguage') || 'sw'
+      setCurrentLanguage(savedLanguage)
+
     } catch (error) {
-      console.error('Apply error:', error)
-      alert(currentLanguage === 'en' ? 'Failed to apply' : 'Imeshindwa kuomba')
+      console.error('Error loading dashboard data:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  // Feature 4: Enhanced Favorites
   const toggleFavorite = async (jobId) => {
-    if (!user) return
-    
     try {
+      const job = jobs.find(j => j._id === jobId)
+      if (!job) return
+
       const isFavorite = favorites.some(fav => fav.jobId === jobId)
       
       if (isFavorite) {
@@ -142,61 +82,62 @@ export default function DashboardPage() {
         setFavorites(prev => prev.filter(fav => fav.jobId !== jobId))
       } else {
         await ApiService.saveFavorite(jobId, user._id)
-        setFavorites(prev => [...prev, { jobId, userId: user._id }])
+        setFavorites(prev => [...prev, { jobId, userId: user._id, _id: 'fav-' + Date.now() }])
       }
     } catch (error) {
-      console.error('Favorite error:', error)
+      console.error('Error toggling favorite:', error)
     }
   }
 
-  // Feature 5: Job Sharing
+  const applyForJob = async (jobId) => {
+    try {
+      const response = await ApiService.applyForJob(jobId, {
+        applicantId: user._id,
+        applicantName: user.name,
+        applicantPhone: user.phone,
+        coverLetter: currentLanguage === 'en' 
+          ? 'I am interested in this job and believe I have the required skills.' 
+          : 'Nina hamu ya kufanya kazi hii na naamini nina ujuzi unaohitajika.'
+      })
+
+      if (response.success) {
+        const job = jobs.find(j => j._id === jobId)
+        const application = {
+          id: response.application?._id || 'app-' + Date.now(),
+          jobId,
+          jobTitle: job?.title,
+          appliedDate: new Date().toISOString(),
+          status: 'pending',
+          employer: job?.employer?.name || 'Mwajiri'
+        }
+
+        setApplications(prev => [...prev, application])
+        alert(currentLanguage === 'en' ? 'Application submitted successfully!' : 'Ombi lako limewasilishwa kikamilifu!')
+      }
+    } catch (error) {
+      console.error('Error applying for job:', error)
+      alert(currentLanguage === 'en' ? 'Failed to submit application' : 'Imeshindwa kutuma ombi')
+    }
+  }
+
   const shareJob = (job) => {
-    const text = `${job.title} - ${job.location}\n${job.description}\nContact: ${job.phone}`
-    
-    if (typeof navigator !== 'undefined' && navigator.share) {
+    const jobText = `${job.title} - ${job.location}\n${job.description}\n\nContact: ${job.phone}`
+    if (navigator.share) {
       navigator.share({
         title: job.title,
-        text: text
+        text: jobText,
+        url: window.location.href
       })
-    } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(text)
-      alert(currentLanguage === 'en' ? 'Copied to clipboard!' : 'Imeigwa kwenye clipboard!')
+    } else {
+      navigator.clipboard.writeText(jobText)
+      alert(currentLanguage === 'en' ? 'Job details copied to clipboard!' : 'Maelezo ya kazi yameigwa kwenye clipboard!')
     }
   }
 
-  // Feature 6: Application Status Tracking
-  const getApplicationStatus = (jobId) => {
-    const application = applications.find(app => app.jobId === jobId)
-    return application ? application.status : 'not_applied'
-  }
-
-  // Feature 7: Profile Completeness
-  const profileCompleteness = AppUtils.calculateProfileCompleteness(user)
-
-  // Feature 8: Language Persistence
   const toggleLanguage = () => {
     const newLanguage = currentLanguage === 'en' ? 'sw' : 'en'
     setCurrentLanguage(newLanguage)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('preferredLanguage', newLanguage)
-    }
-  }
-
-  // Feature 9: Data Export
-  const exportData = (type) => {
-    let data, filename
-    
-    if (type === 'applications') {
-      data = applications
-      filename = 'my-applications.json'
-    } else if (type === 'favorites') {
-      data = favorites
-      filename = 'my-favorites.json'
-    } else {
-      return
-    }
-    
-    AppUtils.exportData(data, filename)
+    localStorage.setItem('preferredLanguage', newLanguage)
   }
 
   const handleUpdateProfile = async (e) => {
@@ -205,46 +146,57 @@ export default function DashboardPage() {
       const response = await ApiService.updateProfile(editProfile)
       if (response.success) {
         setUser(response.user)
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('user', JSON.stringify(response.user))
-        }
-        alert(currentLanguage === 'en' ? 'Profile updated!' : 'Wasifu umehakikishwa!')
+        localStorage.setItem('user', JSON.stringify(response.user))
+        alert(currentLanguage === 'en' ? 'Profile updated successfully!' : 'Wasifu umehakikishwa!')
       }
     } catch (error) {
-      console.error('Profile update error:', error)
-      alert(currentLanguage === 'en' ? 'Update failed' : 'Imeshindwa kusasisha')
+      console.error('Error updating profile:', error)
+      alert(currentLanguage === 'en' ? 'Failed to update profile' : 'Imeshindwa kusasisha wasifu')
     }
   }
 
   const logout = () => {
-    if (confirm(currentLanguage === 'en' ? 'Logout?' : 'Toka?')) {
-      if (typeof window !== 'undefined') {
-        localStorage.clear()
-      }
+    if (confirm(
+      currentLanguage === 'en' 
+        ? 'Are you sure you want to logout?' 
+        : 'Una uhakika unataka kutoka?'
+    )) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('userRole')
+      localStorage.removeItem('favoriteJobs')
       router.push('/auth')
     }
   }
 
-  const clearFilters = () => {
-    setSearchQuery('')
-    setSelectedCategory('all')
-    setSelectedLocation('')
-    setShowFilters(false)
+  const openSideNav = () => {
+    setSideNavOpen(true)
   }
 
-  const matchingJobs = getMatchingJobs()
+  const closeSideNav = () => {
+    setSideNavOpen(false)
+  }
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="loading">
         <div className="spinner"></div>
-        <p>{currentLanguage === 'en' ? 'Loading...' : 'Inapakia...'}</p>
+        <p style={{ marginTop: '16px', color: 'white' }}>
+          {currentLanguage === 'en' ? 'Loading...' : 'Inapakia...'}
+        </p>
       </div>
     )
   }
 
   if (!user) {
-    return null
+    return (
+      <div className="loading">
+        <div className="spinner"></div>
+        <p style={{ marginTop: '16px', color: 'white' }}>
+          {currentLanguage === 'en' ? 'Redirecting...' : 'Inaelekeza...'}
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -259,13 +211,16 @@ export default function DashboardPage() {
             </div>
             
             <div className="user-menu">
-              <button onClick={toggleLanguage} className="language-btn">
-                {currentLanguage === 'en' ? 'EN' : 'SW'}
+              <button
+                onClick={toggleLanguage}
+                className="google-translate"
+              >
+                {currentLanguage === 'en' ? '🇺🇸 English' : '🇰🇪 Kiswahili'}
               </button>
               
               <button 
-                className="menu-btn"
-                onClick={() => setSideNavOpen(true)}
+                className="menu-button"
+                onClick={openSideNav}
               >
                 <i className="fas fa-bars"></i>
               </button>
@@ -275,49 +230,51 @@ export default function DashboardPage() {
       </header>
 
       {/* Side Navigation */}
-      {sideNavOpen && (
-        <div className="overlay show" onClick={() => setSideNavOpen(false)}></div>
-      )}
+      <div className={`overlay ${sideNavOpen ? 'show' : ''}`} onClick={closeSideNav}></div>
       
       <div className={`side-nav ${sideNavOpen ? 'open' : ''}`}>
         <div className="side-nav-header">
-          <h3>{currentLanguage === 'en' ? 'Menu' : 'Menyu'}</h3>
-          <button className="close-btn" onClick={() => setSideNavOpen(false)}>
+          <h2 className="side-nav-title">Quick Links</h2>
+          <button className="side-nav-close" onClick={closeSideNav}>
             <i className="fas fa-times"></i>
           </button>
         </div>
         
         <div className="side-nav-content">
-          <a href="/blog" className="side-nav-item" onClick={() => setSideNavOpen(false)}>
+          <a 
+            href="/blog" 
+            className="side-nav-item"
+            onClick={closeSideNav}
+          >
             <i className="fas fa-info-circle"></i>
-            <span>{currentLanguage === 'en' ? 'About' : 'Kuhusu'}</span>
+            <span>About Kazi Mashinani</span>
           </a>
           
-          <a href="tel:+254790528837" className="side-nav-item" onClick={() => setSideNavOpen(false)}>
+          <a 
+            href="tel:+254790528837" 
+            className="side-nav-item"
+            onClick={closeSideNav}
+          >
             <i className="fas fa-phone"></i>
-            <span>{currentLanguage === 'en' ? 'Call' : 'Piga Simu'}</span>
+            <span>Call Us: +254790528837</span>
           </a>
           
-          <a href="mailto:myhassan19036@gmail.com" className="side-nav-item" onClick={() => setSideNavOpen(false)}>
+          <a 
+            href="mailto:myhassan19036@gmail.com" 
+            className="side-nav-item"
+            onClick={closeSideNav}
+          >
             <i className="fas fa-envelope"></i>
-            <span>Email</span>
+            <span>Email: myhassan19036@gmail.com</span>
           </a>
 
-          <div className="side-nav-section">
-            <h4>{currentLanguage === 'en' ? 'Export' : 'Pakua'}</h4>
-            <button onClick={() => exportData('applications')} className="side-nav-item">
-              <i className="fas fa-download"></i>
-              <span>{currentLanguage === 'en' ? 'Applications' : 'Maombi'}</span>
-            </button>
-            <button onClick={() => exportData('favorites')} className="side-nav-item">
-              <i className="fas fa-download"></i>
-              <span>{currentLanguage === 'en' ? 'Favorites' : 'Vipendwa'}</span>
-            </button>
-          </div>
-
-          <button onClick={logout} className="side-nav-item logout-btn">
+          <button 
+            onClick={logout}
+            className="side-nav-item"
+            style={{ background: '#e74c3c', color: 'white', border: 'none' }}
+          >
             <i className="fas fa-sign-out-alt"></i>
-            <span>{currentLanguage === 'en' ? 'Logout' : 'Toka'}</span>
+            <span>Logout</span>
           </button>
         </div>
       </div>
@@ -325,78 +282,103 @@ export default function DashboardPage() {
       {/* Main Content */}
       <main className="main-content">
         <div className="container">
-          {/* Home Section */}
+          {/* Home Section with Blog */}
           {activeSection === 'home' && (
             <div>
-              <div className="card welcome-card">
-                <div className="card-header">
-                  <h1>{currentLanguage === 'en' ? 'Welcome, ' : 'Karibu, '}{user.name}!</h1>
-                  <p>{currentLanguage === 'en' 
-                    ? 'Find your next opportunity' 
-                    : 'Tafuta fursa yako ijayo'}</p>
-                  
-                  {/* Profile Completeness */}
-                  <div className="profile-completeness">
-                    <div className="completeness-header">
-                      <span>{currentLanguage === 'en' ? 'Profile Complete' : 'Wasifu Kamili'}</span>
-                      <span>{profileCompleteness}%</span>
-                    </div>
-                    <div className="progress-bar">
-                      <div 
-                        className="progress-fill" 
-                        style={{ width: `${profileCompleteness}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats Overview */}
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-icon primary">
-                    <i className="fas fa-briefcase"></i>
-                  </div>
-                  <div className="stat-content">
-                    <h3>{jobs.length}</h3>
-                    <p>{currentLanguage === 'en' ? 'Jobs' : 'Kazi'}</p>
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon success">
-                    <i className="fas fa-file-alt"></i>
-                  </div>
-                  <div className="stat-content">
-                    <h3>{applications.length}</h3>
-                    <p>{currentLanguage === 'en' ? 'Applications' : 'Maombi'}</p>
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon warning">
-                    <i className="fas fa-heart"></i>
-                  </div>
-                  <div className="stat-content">
-                    <h3>{favorites.length}</h3>
-                    <p>{currentLanguage === 'en' ? 'Favorites' : 'Vipendwa'}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick Actions */}
               <div className="card">
                 <div className="card-header">
-                  <h3>{currentLanguage === 'en' ? 'Quick Actions' : 'Vitendo vya Haraka'}</h3>
+                  <h1 style={{ margin: 0, fontSize: '2rem' }}>
+                    {currentLanguage === 'en' ? 'Welcome back, ' : 'Karibu tena, '}{user?.name}!
+                  </h1>
+                  <p style={{ margin: '8px 0 0 0', opacity: 0.9 }}>
+                    {currentLanguage === 'en' 
+                      ? 'Your next opportunity awaits in rural areas' 
+                      : 'Fursa yako ijayo inangojea katika maeneo ya vijijini'
+                    }
+                  </p>
                 </div>
+              </div>
+
+              {/* Blog Section */}
+              <div className="card">
                 <div className="card-body">
-                  <div className="quick-actions">
-                    <button onClick={() => setActiveSection('jobs')} className="quick-action-btn">
-                      <i className="fas fa-search"></i>
-                      <span>{currentLanguage === 'en' ? 'Find Jobs' : 'Tafuta Kazi'}</span>
-                    </button>
-                    <button onClick={() => setActiveSection('profile')} className="quick-action-btn">
-                      <i className="fas fa-user-edit"></i>
-                      <span>{currentLanguage === 'en' ? 'Update Profile' : 'Sasisha Wasifu'}</span>
-                    </button>
+                  <h2 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', color: '#006600' }}>
+                    <i className="fas fa-blog"></i>
+                    {currentLanguage === 'en' ? 'Employment Opportunities in Rural Areas' : 'Fursa za Ajira Katika Maeneo ya Vijijini'}
+                  </h2>
+                  
+                  <div style={{ lineHeight: '1.8', fontSize: '16px', color: '#555' }}>
+                    <p style={{ marginBottom: '20px' }}>
+                      {currentLanguage === 'en' 
+                        ? 'Rural areas offer unique employment opportunities that can transform your career and life. From agriculture to construction, domestic work to transportation services, there are numerous ways to build a sustainable livelihood while contributing to local community development.'
+                        : 'Maeneo ya vijijini yanatoa fursa za kipekee za ajira ambazo zinaweza kubadilisha kazi yako na maisha. Kuanzia kilimo hadi ujenzi, kazi za nyumbani hadi huduma za usafiri, kuna njia nyingi za kujenga riziki endelevu huku ukichangia maendeleo ya jamii ya ndani.'
+                      }
+                    </p>
+
+                    <h3 style={{ color: '#0066cc', margin: '25px 0 15px 0' }}>
+                      {currentLanguage === 'en' ? 'Why Consider Rural Employment?' : 'Kwa Nini Ufikirie Ajira ya Vijijini?'}
+                    </h3>
+                    
+                    <div style={{ display: 'grid', gap: '20px' }}>
+                      <div style={{ padding: '20px', background: '#f0f8ff', borderRadius: '10px', borderLeft: '4px solid #0066cc' }}>
+                        <h4 style={{ color: '#0066cc', margin: '0 0 10px 0' }}>
+                          <i className="fas fa-seedling" style={{ marginRight: '10px' }}></i>
+                          {currentLanguage === 'en' ? 'Growing Opportunities' : 'Fursa Zanazokua'}
+                        </h4>
+                        <p style={{ margin: 0 }}>
+                          {currentLanguage === 'en' 
+                            ? 'Agriculture, construction, and service industries are rapidly expanding in rural areas, creating new job opportunities every day.'
+                            : 'Kilimo, ujenzi na viwanda vya huduma vinakua kwa kasi katika maeneo ya vijijini, zikiunda fursa mpya za kazi kila siku.'
+                          }
+                        </p>
+                      </div>
+
+                      <div style={{ padding: '20px', background: '#f0fff0', borderRadius: '10px', borderLeft: '4px solid #009900' }}>
+                        <h4 style={{ color: '#009900', margin: '0 0 10px 0' }}>
+                          <i className="fas fa-home" style={{ marginRight: '10px' }}></i>
+                          {currentLanguage === 'en' ? 'Community Impact' : 'Athari ya Jamii'}
+                        </h4>
+                        <p style={{ margin: 0 }}>
+                          {currentLanguage === 'en' 
+                            ? 'Working in rural areas allows you to directly contribute to local economic development and community growth.'
+                            : 'Kufanya kazi katika maeneo ya vijijini kunakuruhusu kuchangia moja kwa moja kwa maendeleo ya kiuchumi ya ndani na ukuaji wa jamii.'
+                          }
+                        </p>
+                      </div>
+
+                      <div style={{ padding: '20px', background: '#fff8f0', borderRadius: '10px', borderLeft: '4px solid #ff6600' }}>
+                        <h4 style={{ color: '#ff6600', margin: '0 0 10px 0' }}>
+                          <i className="fas fa-hand-holding-usd" style={{ marginRight: '10px' }}></i>
+                          {currentLanguage === 'en' ? 'Cost of Living' : 'Gharama ya Maisha'}
+                        </h4>
+                        <p style={{ margin: 0 }}>
+                          {currentLanguage === 'en' 
+                            ? 'Lower cost of living in rural areas means your income can go further, providing better quality of life.'
+                            : 'Gharama ya chini ya maisha katika maeneo ya vijijini inamaanisha mapato yako yanaweza kutumika zaidi, na kutoa ubora bora wa maisha.'
+                          }
+                        </p>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '30px', padding: '20px', background: '#e6f7ff', borderRadius: '10px' }}>
+                      <h3 style={{ color: '#0066cc', marginBottom: '15px' }}>
+                        {currentLanguage === 'en' ? 'Ready to Find Your Next Opportunity?' : 'Tayari Kupata Fursa Yako Ijayo?'}
+                      </h3>
+                      <p style={{ marginBottom: '20px' }}>
+                        {currentLanguage === 'en' 
+                          ? 'Explore available jobs in various sectors and start your journey toward meaningful employment in rural communities.'
+                          : 'Chunguza kazi zilizopo katika sekta mbalimbali na anza safari yako kuelekea ajira yenye maana katika jamii za vijijini.'
+                        }
+                      </p>
+                      <button 
+                        onClick={() => setActiveSection('jobs')}
+                        className="btn btn-primary"
+                        style={{ padding: '12px 30px', fontSize: '16px' }}
+                      >
+                        <i className="fas fa-search" style={{ marginRight: '8px' }}></i>
+                        {currentLanguage === 'en' ? 'Browse Jobs' : 'Vinjari Kazi'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -406,177 +388,195 @@ export default function DashboardPage() {
           {/* Jobs Section */}
           {activeSection === 'jobs' && (
             <div>
-              {/* Search Header */}
-              <div className="card search-header">
+              <div className="card">
                 <div className="card-body">
-                  <div className="search-container">
-                    <div className="search-input-group">
-                      <i className="fas fa-search"></i>
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={handleSearch}
-                        placeholder={currentLanguage === 'en' ? 'Search jobs...' : 'Tafuta kazi...'}
-                        className="search-input"
-                      />
-                    </div>
-                    
-                    <button 
-                      onClick={() => setShowFilters(!showFilters)}
-                      className="btn btn-outline"
-                    >
-                      <i className="fas fa-filter"></i>
-                      {currentLanguage === 'en' ? 'Filters' : 'Chuja'}
-                    </button>
-                  </div>
+                  <h2 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                    <i className="fas fa-briefcase" style={{ color: '#3498db' }}></i>
+                    {currentLanguage === 'en' ? 'Available Jobs' : 'Kazi Zilizopo'} ({jobs.length})
+                  </h2>
 
-                  {/* Filters Panel */}
-                  {showFilters && (
-                    <div className="filters-panel">
-                      <div className="filter-group">
-                        <label>{currentLanguage === 'en' ? 'Category' : 'Aina'}</label>
-                        <select
-                          value={selectedCategory}
-                          onChange={(e) => setSelectedCategory(e.target.value)}
-                        >
-                          <option value="all">{currentLanguage === 'en' ? 'All' : 'Zote'}</option>
-                          <option value="kilimo">{currentLanguage === 'en' ? 'Agriculture' : 'Kilimo'}</option>
-                          <option value="ujenzi">{currentLanguage === 'en' ? 'Construction' : 'Ujenzi'}</option>
-                          <option value="nyumbani">{currentLanguage === 'en' ? 'Domestic' : 'Nyumbani'}</option>
-                        </select>
-                      </div>
-                      
-                      <div className="filter-group">
-                        <label>{currentLanguage === 'en' ? 'Location' : 'Eneo'}</label>
-                        <input
-                          type="text"
-                          value={selectedLocation}
-                          onChange={(e) => setSelectedLocation(e.target.value)}
-                          placeholder={currentLanguage === 'en' ? 'Location...' : 'Eneo...'}
-                        />
-                      </div>
-
-                      <div className="filter-actions">
-                        <button onClick={clearFilters} className="btn btn-outline">
-                          {currentLanguage === 'en' ? 'Clear' : 'Futa'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="search-results-info">
-                    <p>
-                      {currentLanguage === 'en' 
-                        ? `Found ${filteredJobs.length} jobs` 
-                        : `Imepata kazi ${filteredJobs.length}`}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Smart Matching Banner */}
-              {matchingJobs.length > 0 && matchingJobs.length < filteredJobs.length && (
-                <div className="card matching-banner">
-                  <div className="card-body">
-                    <div className="banner-content">
-                      <i className="fas fa-lightbulb"></i>
-                      <div>
-                        <h4>{currentLanguage === 'en' ? 'Matching Jobs' : 'Kazi Zinalingana'}</h4>
-                        <p>
-                          {currentLanguage === 'en' 
-                            ? `${matchingJobs.length} jobs match your skills` 
-                            : `Kazi ${matchingJobs.length} zinalingana na ujuzi wako`}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Jobs List */}
-              <div className="jobs-list">
-                {filteredJobs.map(job => {
-                  const isFavorite = favorites.some(fav => fav.jobId === job._id)
-                  const applicationStatus = getApplicationStatus(job._id)
-                  
-                  return (
-                    <div key={job._id} className="job-card">
-                      <div className="job-header">
-                        <div className="job-title-section">
-                          <h3>{job.title}</h3>
-                          <div className="job-meta">
-                            <span className="category-badge">{job.category}</span>
+                  <div className="jobs-grid">
+                    {jobs.length > 0 ? jobs.map(job => (
+                      <div key={job._id} className="job-card">
+                        <div className="job-card-header">
+                          <div className="job-title">{job.title}</div>
+                          <div className="job-badges">
+                            <span className="badge badge-primary">{job.category}</span>
+                            {job.urgent && <span className="badge badge-warning">{currentLanguage === 'en' ? 'Urgent' : 'Ya Haraka'}</span>}
+                            {job.featured && <span className="badge badge-secondary">{currentLanguage === 'en' ? 'Featured' : 'Iliyoboreshwa'}</span>}
                           </div>
                         </div>
-                        <div className="job-actions">
+                        
+                        <div className="job-card-body">
+                          <p className="job-description">{job.description}</p>
+                          
+                          <div className="job-details">
+                            <div className="job-detail">
+                              <i className="fas fa-map-marker-alt"></i>
+                              <span>{job.location}</span>
+                            </div>
+                            <div className="job-detail">
+                              <i className="fas fa-building"></i>
+                              <span>{job.businessType}</span>
+                            </div>
+                            {job.salary && (
+                              <div className="job-detail">
+                                <i className="fas fa-money-bill"></i>
+                                <span>{job.salary}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {job.skills && job.skills.length > 0 && (
+                            <div className="job-skills">
+                              {job.skills.map(skill => (
+                                <span key={skill} className="skill-tag">{skill}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="job-card-actions">
+                          <a 
+                            href={`tel:${job.phone}`}
+                            className="btn btn-primary"
+                            style={{ flex: 1 }}
+                          >
+                            <i className="fas fa-phone"></i>
+                            <span>{currentLanguage === 'en' ? 'Call' : 'Piga Simu'}</span>
+                          </a>
                           <button
                             onClick={() => toggleFavorite(job._id)}
-                            className={`icon-btn ${isFavorite ? 'favorited' : ''}`}
+                            className="btn"
+                            style={{ 
+                              background: favorites.some(fav => fav.jobId === job._id) ? '#e74c3c' : '#95a5a6',
+                              color: 'white'
+                            }}
                           >
                             <i className="fas fa-heart"></i>
                           </button>
                           <button
                             onClick={() => shareJob(job)}
-                            className="icon-btn"
+                            className="btn"
+                            style={{ 
+                              background: '#3498db',
+                              color: 'white'
+                            }}
                           >
-                            <i className="fas fa-share-alt"></i>
+                            <i className="fas fa-share"></i>
                           </button>
                         </div>
-                      </div>
-                      
-                      <div className="job-body">
-                        <p className="job-description">{job.description}</p>
-                        
-                        <div className="job-details-grid">
-                          <div className="job-detail">
-                            <i className="fas fa-map-marker-alt"></i>
-                            <span>{job.location}</span>
-                          </div>
-                          <div className="job-detail">
-                            <i className="fas fa-building"></i>
-                            <span>{job.businessType}</span>
-                          </div>
-                          {job.salary && (
-                            <div className="job-detail">
-                              <i className="fas fa-money-bill-wave"></i>
-                              <span>{job.salary}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
 
-                      <div className="job-footer">
-                        <div className="job-contact">
-                          <a href={`tel:${job.phone}`} className="btn btn-primary">
-                            <i className="fas fa-phone"></i>
-                            {currentLanguage === 'en' ? 'Call' : 'Piga'}
-                          </a>
-                          
-                          {/* Smart Apply Button */}
+                        <div style={{ padding: '0 20px 20px' }}>
                           <button
-                            onClick={() => quickApply(job._id)}
-                            className={`btn ${
-                              applicationStatus === 'pending' ? 'btn-warning' :
-                              applicationStatus === 'accepted' ? 'btn-success' :
-                              applicationStatus === 'rejected' ? 'btn-danger' : 'btn-secondary'
-                            }`}
-                            disabled={applicationStatus !== 'not_applied'}
+                            onClick={() => applyForJob(job._id)}
+                            className="btn btn-primary btn-block"
+                            disabled={applications.some(app => app.jobId === job._id)}
                           >
-                            <i className="fas fa-paper-plane"></i>
-                            {applicationStatus === 'not_applied' 
-                              ? (currentLanguage === 'en' ? 'Apply' : 'Omba')
-                              : applicationStatus === 'pending' 
-                                ? (currentLanguage === 'en' ? 'Pending' : 'Inasubiri')
-                                : applicationStatus === 'accepted'
-                                  ? (currentLanguage === 'en' ? 'Accepted' : 'Imekubaliwa')
-                                  : (currentLanguage === 'en' ? 'Rejected' : 'Imekataliwa')
+                            {applications.some(app => app.jobId === job._id) 
+                              ? (currentLanguage === 'en' ? 'Applied' : 'Umeomba') 
+                              : (currentLanguage === 'en' ? 'Apply Now' : 'Omba Sasa')
                             }
                           </button>
                         </div>
                       </div>
+                    )) : (
+                      <div className="empty-state">
+                        <i className="fas fa-briefcase"></i>
+                        <h3>{currentLanguage === 'en' ? 'No Jobs Available' : 'Hakuna Kazi Zilizopatikana'}</h3>
+                        <p>{currentLanguage === 'en' ? 'No jobs available at the moment. Please check back later.' : 'Hakuna kazi zilizopo kwa sasa. Tafadhali angalia tena baadaye.'}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Favorites Section */}
+          {activeSection === 'favorites' && (
+            <div className="card">
+              <div className="card-body">
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                  <i className="fas fa-heart" style={{ color: '#e74c3c' }}></i>
+                  {currentLanguage === 'en' ? 'Favorite Jobs' : 'Kazi Unazopenda'} ({favorites.length})
+                </h2>
+
+                <div className="jobs-grid">
+                  {favorites.length > 0 ? favorites.map(favorite => {
+                    const job = jobs.find(j => j._id === favorite.jobId)
+                    if (!job) return null
+                    return (
+                      <div key={job._id} className="job-card">
+                        <div className="job-card-header">
+                          <div className="job-title">{job.title}</div>
+                          <div className="job-badges">
+                            <span className="badge badge-primary">{job.category}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="job-card-body">
+                          <p className="job-description">{job.description}</p>
+                          
+                          <div className="job-details">
+                            <div className="job-detail">
+                              <i className="fas fa-map-marker-alt"></i>
+                              <span>{job.location}</span>
+                            </div>
+                            <div className="job-detail">
+                              <i className="fas fa-building"></i>
+                              <span>{job.businessType}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="job-card-actions">
+                          <a 
+                            href={`tel:${job.phone}`}
+                            className="btn btn-primary"
+                            style={{ flex: 1 }}
+                          >
+                            <i className="fas fa-phone"></i>
+                            <span>{currentLanguage === 'en' ? 'Call' : 'Piga Simu'}</span>
+                          </a>
+                          <button
+                            onClick={() => toggleFavorite(job._id)}
+                            className="btn"
+                            style={{ 
+                              background: '#e74c3c',
+                              color: 'white'
+                            }}
+                          >
+                            <i className="fas fa-heart"></i>
+                          </button>
+                          <button
+                            onClick={() => shareJob(job)}
+                            className="btn"
+                            style={{ 
+                              background: '#3498db',
+                              color: 'white'
+                            }}
+                          >
+                            <i className="fas fa-share"></i>
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  }) : (
+                    <div className="empty-state">
+                      <i className="fas fa-heart"></i>
+                      <h3>{currentLanguage === 'en' ? 'No Favorite Jobs' : 'Hakuna Kazi Unazopenda'}</h3>
+                      <p>{currentLanguage === 'en' ? 'You haven\'t added any jobs to your favorites yet.' : 'Bado hujaweka kazi yoyote kwenye orodha ya vipendwa.'}</p>
+                      <button 
+                        onClick={() => setActiveSection('jobs')}
+                        className="btn btn-primary"
+                        style={{ marginTop: '16px' }}
+                      >
+                        {currentLanguage === 'en' ? 'Browse Jobs' : 'Vinjari Kazi'}
+                      </button>
                     </div>
-                  )
-                })}
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -585,41 +585,58 @@ export default function DashboardPage() {
           {activeSection === 'applications' && (
             <div className="card">
               <div className="card-body">
-                <h2>
-                  <i className="fas fa-file-alt"></i> 
-                  {currentLanguage === 'en' ? 'My Applications' : 'Maombi Yangu'} 
-                  ({applications.length})
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                  <i className="fas fa-file-alt" style={{ color: '#2ecc71' }}></i>
+                  {currentLanguage === 'en' ? 'My Applications' : 'Maombi Yangu'} ({applications.length})
                 </h2>
-                
-                {applications.length > 0 ? (
-                  <div className="applications-list">
-                    {applications.map(application => (
-                      <div key={application._id} className="application-item">
-                        <div className="app-header">
-                          <h4>{application.jobTitle}</h4>
-                          <span className={`status ${application.status}`}>
-                            {application.status === 'pending' ? (currentLanguage === 'en' ? 'Pending' : 'Inasubiri') :
-                             application.status === 'accepted' ? (currentLanguage === 'en' ? 'Accepted' : 'Imekubaliwa') :
-                             (currentLanguage === 'en' ? 'Rejected' : 'Imekataliwa')}
-                          </span>
-                        </div>
-                        <p>{currentLanguage === 'en' ? 'Employer' : 'Mwajiri'}: {application.employer}</p>
-                        <small>{new Date(application.appliedDate).toLocaleDateString()}</small>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {applications.length > 0 ? applications.map(application => (
+                    <div key={application.id} style={{ 
+                      padding: '20px', 
+                      background: '#f8f9fa', 
+                      borderRadius: '12px',
+                      border: '1px solid #e9ecef'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                        <h3 style={{ margin: 0, flex: 1 }}>{application.jobTitle}</h3>
+                        <span style={{ 
+                          padding: '4px 12px', 
+                          borderRadius: '20px', 
+                          fontSize: '0.8rem',
+                          fontWeight: '600',
+                          background: application.status === 'pending' ? '#fff3cd' : 
+                                    application.status === 'accepted' ? '#d1edff' : '#f8d7da',
+                          color: application.status === 'pending' ? '#856404' : 
+                                application.status === 'accepted' ? '#0c5460' : '#721c24'
+                        }}>
+                          {application.status === 'pending' ? (currentLanguage === 'en' ? 'Pending' : 'Inasubiri') :
+                           application.status === 'accepted' ? (currentLanguage === 'en' ? 'Accepted' : 'Imekubaliwa') :
+                           (currentLanguage === 'en' ? 'Rejected' : 'Imekataliwa')}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="empty-state">
-                    <i className="fas fa-file-alt"></i>
-                    <h3>{currentLanguage === 'en' ? 'No Applications' : 'Hakuna Maombi'}</h3>
-                    <button 
-                      onClick={() => setActiveSection('jobs')}
-                      className="btn btn-primary"
-                    >
-                      {currentLanguage === 'en' ? 'Find Jobs' : 'Tafuta Kazi'}
-                    </button>
-                  </div>
-                )}
+                      <p style={{ margin: '8px 0', color: '#666' }}>
+                        {currentLanguage === 'en' ? 'Employer:' : 'Mwajiri:'} {application.employer}
+                      </p>
+                      <p style={{ margin: 0, fontSize: '0.9rem', color: '#999' }}>
+                        {currentLanguage === 'en' ? 'Date:' : 'Tarehe:'} {new Date(application.appliedDate).toLocaleDateString('sw-TZ')}
+                      </p>
+                    </div>
+                  )) : (
+                    <div className="empty-state">
+                      <i className="fas fa-file-alt"></i>
+                      <h3>{currentLanguage === 'en' ? 'No Applications' : 'Hakuna Maombi'}</h3>
+                      <p>{currentLanguage === 'en' ? 'You haven\'t applied for any jobs yet.' : 'Bado hujaomba kazi yoyote.'}</p>
+                      <button 
+                        onClick={() => setActiveSection('jobs')}
+                        className="btn btn-primary"
+                        style={{ marginTop: '16px' }}
+                      >
+                        {currentLanguage === 'en' ? 'Browse Jobs' : 'Vinjari Kazi'}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -628,61 +645,72 @@ export default function DashboardPage() {
           {activeSection === 'profile' && user && (
             <div className="card">
               <div className="card-body">
-                <div className="profile-header">
-                  <div className="user-avatar">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px' }}>
+                  <div className="user-avatar" style={{ width: '80px', height: '80px', fontSize: '2rem' }}>
                     {user.name?.charAt(0)?.toUpperCase() || 'U'}
                   </div>
                   <div>
-                    <h2>{user.name}</h2>
-                    <p>{user.location}</p>
+                    <h2 style={{ margin: 0 }}>{user.name}</h2>
+                    <p style={{ margin: '4px 0 0 0', color: '#666' }}>
+                      {userRole === 'employee' ? (currentLanguage === 'en' ? 'Job Seeker' : 'Mtafuta Kazi') : (currentLanguage === 'en' ? 'Employer' : 'Mwajiri')} | {user.location}
+                    </p>
                   </div>
                 </div>
 
-                <form onSubmit={handleUpdateProfile}>
-                  <div className="form-group">
-                    <label>{currentLanguage === 'en' ? 'Full Name' : 'Jina Kamili'}</label>
-                    <input
-                      type="text"
-                      value={editProfile.name}
-                      onChange={(e) => setEditProfile(prev => ({ ...prev, name: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label>{currentLanguage === 'en' ? 'Phone' : 'Simu'}</label>
-                    <input
-                      type="tel"
-                      value={editProfile.phone}
-                      onChange={(e) => setEditProfile(prev => ({ ...prev, phone: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label>{currentLanguage === 'en' ? 'Location' : 'Eneo'}</label>
-                    <input
-                      type="text"
-                      value={editProfile.location}
-                      onChange={(e) => setEditProfile(prev => ({ ...prev, location: e.target.value }))}
-                      required
-                    />
-                  </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+                  <div>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                      <i className="fas fa-user-edit" style={{ color: '#3498db' }}></i>
+                      {currentLanguage === 'en' ? 'Edit Profile' : 'Hariri Wasifu'}
+                    </h3>
+                    
+                    <form onSubmit={handleUpdateProfile}>
+                      <div className="form-group">
+                        <label className="form-label">
+                          {currentLanguage === 'en' ? 'Full Name' : 'Jina Kamili'} *
+                        </label>
+                        <input
+                          type="text"
+                          value={editProfile.name}
+                          onChange={(e) => setEditProfile(prev => ({ ...prev, name: e.target.value }))}
+                          className="form-control"
+                          required
+                        />
+                      </div>
+                      
+                      <div className="form-group">
+                        <label className="form-label">
+                          {currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'} *
+                        </label>
+                        <input
+                          type="tel"
+                          value={editProfile.phone}
+                          onChange={(e) => setEditProfile(prev => ({ ...prev, phone: e.target.value }))}
+                          className="form-control"
+                          required
+                        />
+                      </div>
+                      
+                      <div className="form-group">
+                        <label className="form-label">
+                          {currentLanguage === 'en' ? 'Location' : 'Eneo'} *
+                        </label>
+                        <input
+                          type="text"
+                          value={editProfile.location}
+                          onChange={(e) => setEditProfile(prev => ({ ...prev, location: e.target.value }))}
+                          className="form-control"
+                          required
+                        />
+                      </div>
 
-                  <div className="form-group">
-                    <label>{currentLanguage === 'en' ? 'Skills' : 'Ujuzi'}</label>
-                    <input
-                      type="text"
-                      value={editProfile.skills}
-                      onChange={(e) => setEditProfile(prev => ({ ...prev, skills: e.target.value }))}
-                      placeholder={currentLanguage === 'en' ? 'e.g. farming, construction' : 'K.m. kilimo, ujenzi'}
-                    />
+                      <button type="submit" className="btn btn-primary btn-block">
+                        <i className="fas fa-save"></i>
+                        {currentLanguage === 'en' ? 'Save Changes' : 'Hifadhi Mabadiliko'}
+                      </button>
+                    </form>
                   </div>
-
-                  <button type="submit" className="btn btn-primary">
-                    {currentLanguage === 'en' ? 'Save Changes' : 'Hifadhi'}
-                  </button>
-                </form>
+                </div>
               </div>
             </div>
           )}
@@ -691,28 +719,29 @@ export default function DashboardPage() {
 
       {/* Footer */}
       <footer className="footer">
-        <div className="container">
-          <p>Kazi Mashinani &copy; 2025</p>
+        <div className="footer-content">
+          <p>Kazi Mashinani &copy; 2025. {currentLanguage === 'en' ? 'All rights reserved.' : 'Haki zote zimehifadhiwa.'}</p>
         </div>
       </footer>
 
       {/* Bottom Navigation */}
       <nav className="bottom-nav">
-        <div className="nav-content">
+        <div className="bottom-nav-content">
           {[
-            { id: 'home', icon: 'fa-home', label: { en: 'Home', sw: 'Nyumbani' } },
-            { id: 'jobs', icon: 'fa-briefcase', label: { en: 'Jobs', sw: 'Kazi' } },
-            { id: 'applications', icon: 'fa-file-alt', label: { en: 'Applications', sw: 'Maombi' } },
-            { id: 'profile', icon: 'fa-user', label: { en: 'Profile', sw: 'Wasifu' } }
+            { id: 'home', icon: 'fa-home', en: 'Home', sw: 'Nyumbani' },
+            { id: 'jobs', icon: 'fa-briefcase', en: 'Jobs', sw: 'Kazi' },
+            { id: 'favorites', icon: 'fa-heart', en: 'Favorites', sw: 'Vipendwa' },
+            { id: 'applications', icon: 'fa-file-alt', en: 'Applications', sw: 'Maombi' },
+            { id: 'profile', icon: 'fa-user', en: 'Profile', sw: 'Wasifu' }
           ].map(section => (
-            <button
+            <div
               key={section.id}
-              className={`nav-item ${activeSection === section.id ? 'active' : ''}`}
+              className={`bottom-nav-item ${activeSection === section.id ? 'active' : ''}`}
               onClick={() => setActiveSection(section.id)}
             >
               <i className={`fas ${section.icon}`}></i>
-              <span>{currentLanguage === 'en' ? section.label.en : section.label.sw}</span>
-            </button>
+              <span>{currentLanguage === 'en' ? section.en : section.sw}</span>
+            </div>
           ))}
         </div>
       </nav>
