@@ -16,17 +16,15 @@ export default function EmployerPage() {
     description: '',
     location: '',
     category: 'kilimo',
-    salary: '',
-    experience: '',
     skills: '',
-    phone: '',
-    businessType: ''
+    phone: ''
   })
-  const [stats, setStats] = useState({
-    totalJobs: 0,
-    activeJobs: 0,
-    totalApplications: 0,
-    hired: 0
+  const [editJob, setEditJob] = useState(null)
+  const [editProfile, setEditProfile] = useState({
+    name: '',
+    phone: '',
+    location: '',
+    businessName: ''
   })
   const router = useRouter()
 
@@ -49,32 +47,29 @@ export default function EmployerPage() {
 
       const user = JSON.parse(userData)
       setUser(user)
+      setEditProfile({
+        name: user.name || '',
+        phone: user.phone || '',
+        location: user.location || '',
+        businessName: user.businessName || ''
+      })
 
       if (user.role !== 'employer') {
         router.push('/dashboard')
         return
       }
 
-      // Load employer jobs from localStorage
-      const savedJobs = JSON.parse(localStorage.getItem('employerJobs') || '[]')
-      setJobs(savedJobs)
-      setStats(prev => ({ 
-        ...prev, 
-        totalJobs: savedJobs.length,
-        activeJobs: savedJobs.filter(job => !job.closed)?.length || 0
-      }))
+      // Load employer jobs
+      const jobsResponse = await ApiService.getEmployerJobs(user._id)
+      if (jobsResponse.success) {
+        setJobs(jobsResponse.jobs || [])
+      }
 
-      // Load applications from localStorage
-      const savedApplications = JSON.parse(localStorage.getItem('jobApplications') || '[]')
-      const employerApplications = savedApplications.filter(app => 
-        savedJobs.some(job => job._id === app.jobId)
-      )
-      setApplications(employerApplications)
-      setStats(prev => ({ 
-        ...prev, 
-        totalApplications: employerApplications.length,
-        hired: employerApplications.filter(app => app.status === 'hired')?.length || 0
-      }))
+      // Load applications
+      const applicationsResponse = await ApiService.getEmployerApplications(user._id)
+      if (applicationsResponse.success) {
+        setApplications(applicationsResponse.applications || [])
+      }
 
     } catch (error) {
       console.error('Error loading employer data:', error)
@@ -90,10 +85,7 @@ export default function EmployerPage() {
         ...jobForm,
         employerId: user._id,
         employerName: user.name,
-        businessType: jobForm.businessType || user.name,
-        skills: jobForm.skills.split(',').map(skill => skill.trim()).filter(skill => skill),
-        urgent: false,
-        featured: false,
+        skills: jobForm.skills ? jobForm.skills.split(',').map(skill => skill.trim()).filter(skill => skill) : [],
         postedDate: new Date().toISOString()
       }
 
@@ -108,23 +100,78 @@ export default function EmployerPage() {
           description: '',
           location: '',
           category: 'kilimo',
-          salary: '',
-          experience: '',
           skills: '',
-          phone: user.phone || '',
-          businessType: ''
+          phone: user.phone || ''
         })
         
         alert(currentLanguage === 'en' ? 'Job posted successfully!' : 'Kazi imetangazwa kikamilifu!')
-        setStats(prev => ({ 
-          ...prev, 
-          totalJobs: prev.totalJobs + 1,
-          activeJobs: prev.activeJobs + 1
-        }))
       }
     } catch (error) {
       console.error('Error creating job:', error)
       alert(currentLanguage === 'en' ? 'Failed to post job' : 'Imeshindwa kutangaza kazi')
+    }
+  }
+
+  const handleEditJob = (job) => {
+    setEditJob(job)
+    setJobForm({
+      title: job.title,
+      description: job.description,
+      location: job.location,
+      category: job.category,
+      skills: job.skills?.join(', ') || '',
+      phone: job.phone || user.phone
+    })
+    setActiveSection('post-job')
+  }
+
+  const handleUpdateJob = async (e) => {
+    e.preventDefault()
+    try {
+      const jobData = {
+        ...jobForm,
+        skills: jobForm.skills ? jobForm.skills.split(',').map(skill => skill.trim()).filter(skill => skill) : [],
+      }
+
+      const response = await ApiService.updateJob(editJob._id, jobData)
+      if (response.success) {
+        const updatedJobs = jobs.map(job => 
+          job._id === editJob._id ? response.job : job
+        )
+        setJobs(updatedJobs)
+        localStorage.setItem('employerJobs', JSON.stringify(updatedJobs))
+        
+        setEditJob(null)
+        setJobForm({
+          title: '',
+          description: '',
+          location: '',
+          category: 'kilimo',
+          skills: '',
+          phone: user.phone || ''
+        })
+        
+        alert(currentLanguage === 'en' ? 'Job updated successfully!' : 'Kazi imesasishwa kikamilifu!')
+        setActiveSection('my-jobs')
+      }
+    } catch (error) {
+      console.error('Error updating job:', error)
+      alert(currentLanguage === 'en' ? 'Failed to update job' : 'Imeshindwa kusasisha kazi')
+    }
+  }
+
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault()
+    try {
+      const response = await ApiService.updateProfile(editProfile)
+      if (response.success) {
+        setUser(response.user)
+        localStorage.setItem('user', JSON.stringify(response.user))
+        alert(currentLanguage === 'en' ? 'Profile updated successfully!' : 'Wasifu umehakikishwa!')
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error)
+      alert(currentLanguage === 'en' ? 'Failed to update profile' : 'Imeshindwa kusasisha wasifu')
     }
   }
 
@@ -142,10 +189,6 @@ export default function EmployerPage() {
           app._id === applicationId ? { ...app, status } : app
         )
         localStorage.setItem('jobApplications', JSON.stringify(updatedAllApplications))
-        
-        if (status === 'hired') {
-          setStats(prev => ({ ...prev, hired: prev.hired + 1 }))
-        }
         
         alert(currentLanguage === 'en' ? 'Application updated!' : 'Ombi limebadilishwa!')
       }
@@ -173,25 +216,18 @@ export default function EmployerPage() {
     }
   }
 
-  const handleEditProfile = () => {
-    alert(currentLanguage === 'en' 
-      ? 'Edit profile feature coming soon!' 
-      : 'Kipengele cha kuhariri wasifu kinakuja hivi karibuni!'
-    )
-  }
-
-  const handleNotificationSettings = () => {
-    alert(currentLanguage === 'en' 
-      ? 'Notification settings coming soon!' 
-      : 'Mipangilio ya arifa inakuja hivi karibuni!'
-    )
-  }
-
-  const handleAccountSecurity = () => {
-    alert(currentLanguage === 'en' 
-      ? 'Account security settings coming soon!' 
-      : 'Mipangilio ya usalama wa akaunti yanakuja hivi karibuni!'
-    )
+  const shareJob = (job) => {
+    const jobText = `${job.title} - ${job.location}\n${job.description}\n\nContact: ${job.phone}`
+    if (navigator.share) {
+      navigator.share({
+        title: job.title,
+        text: jobText,
+        url: window.location.href
+      })
+    } else {
+      navigator.clipboard.writeText(jobText)
+      alert(currentLanguage === 'en' ? 'Job details copied to clipboard!' : 'Maelezo ya kazi yameigwa kwenye clipboard!')
+    }
   }
 
   if (!mounted || loading) {
@@ -220,9 +256,20 @@ export default function EmployerPage() {
             </div>
             
             <div className="user-menu">
-              <div className="language-switcher" onClick={toggleLanguage}>
-                <span>{currentLanguage === 'en' ? '🇺🇸 English' : '🇰🇪 Kiswahili'}</span>
-              </div>
+              <button
+                onClick={toggleLanguage}
+                className="language-switcher-btn"
+                style={{ 
+                  background: 'transparent', 
+                  border: 'none', 
+                  padding: '8px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  color: '#333'
+                }}
+              >
+                {currentLanguage === 'en' ? '🇺🇸 EN' : '🇰🇪 SW'}
+              </button>
               
               <div className="user-info">
                 <div className="user-avatar">
@@ -236,7 +283,7 @@ export default function EmployerPage() {
                 </div>
               </div>
               
-              <button onClick={logout} className="btn btn-danger">
+              <button onClick={logout} className="btn btn-danger" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <i className="fas fa-sign-out-alt"></i>
                 <span>{currentLanguage === 'en' ? 'Logout' : 'Toka'}</span>
               </button>
@@ -259,7 +306,20 @@ export default function EmployerPage() {
               <div
                 key={section.id}
                 className={`nav-item ${activeSection === section.id ? 'active' : ''}`}
-                onClick={() => setActiveSection(section.id)}
+                onClick={() => {
+                  setActiveSection(section.id)
+                  if (section.id === 'post-job') {
+                    setEditJob(null)
+                    setJobForm({
+                      title: '',
+                      description: '',
+                      location: '',
+                      category: 'kilimo',
+                      skills: '',
+                      phone: user.phone || ''
+                    })
+                  }
+                }}
               >
                 <i className={`fas ${section.icon}`}></i>
                 <span>{currentLanguage === 'en' ? section.en : section.sw}</span>
@@ -272,7 +332,7 @@ export default function EmployerPage() {
       {/* Main Content */}
       <main className="main-content">
         <div className="container">
-          {/* Dashboard Section */}
+          {/* Dashboard Section with Blog */}
           {activeSection === 'dashboard' && (
             <div className="page-transition">
               <div className="card">
@@ -282,116 +342,115 @@ export default function EmployerPage() {
                   </h1>
                   <p style={{ margin: '8px 0 0 0', opacity: 0.9 }}>
                     {currentLanguage === 'en' 
-                      ? 'Manage your job posts and find qualified workers' 
-                      : 'Dhibiti matangazo yako ya kazi na upate wafanyikazi waliohitimu'
+                      ? 'Make a difference in your community by creating employment opportunities' 
+                      : 'Fanya tofauti katika jamii yako kwa kuunda fursa za ajira'
                     }
                   </p>
                 </div>
               </div>
 
-              <div className="stats-grid">
-                <div className="stat-card hover-lift">
-                  <div className="stat-icon primary">
-                    <i className="fas fa-briefcase"></i>
-                  </div>
-                  <div className="stat-content">
-                    <h3>{stats.totalJobs}</h3>
-                    <p>{currentLanguage === 'en' ? 'Total Jobs' : 'Jumla ya Kazi'}</p>
-                  </div>
-                </div>
-
-                <div className="stat-card hover-lift">
-                  <div className="stat-icon secondary">
-                    <i className="fas fa-play-circle"></i>
-                  </div>
-                  <div className="stat-content">
-                    <h3>{stats.activeJobs}</h3>
-                    <p>{currentLanguage === 'en' ? 'Active Jobs' : 'Kazi Aktivu'}</p>
-                  </div>
-                </div>
-
-                <div className="stat-card hover-lift">
-                  <div className="stat-icon warning">
-                    <i className="fas fa-file-alt"></i>
-                  </div>
-                  <div className="stat-content">
-                    <h3>{stats.totalApplications}</h3>
-                    <p>{currentLanguage === 'en' ? 'Applications' : 'Maombi'}</p>
-                  </div>
-                </div>
-
-                <div className="stat-card hover-lift">
-                  <div className="stat-icon success">
-                    <i className="fas fa-user-check"></i>
-                  </div>
-                  <div className="stat-content">
-                    <h3>{stats.hired}</h3>
-                    <p>{currentLanguage === 'en' ? 'Hired' : 'Waliokwishaajiriwa'}</p>
-                  </div>
-                </div>
-              </div>
-
+              {/* Blog Section */}
               <div className="card">
                 <div className="card-body">
-                  <h2 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                    <i className="fas fa-bolt" style={{ color: '#f39c12' }}></i>
-                    {currentLanguage === 'en' ? 'Quick Actions' : 'Vitendo Vya Haraka'}
+                  <h2 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', color: '#006600' }}>
+                    <i className="fas fa-handshake"></i>
+                    {currentLanguage === 'en' ? 'Employers: Be the Solution to Unemployment' : 'Waajiri: Kuwa Suluhisho la Ukosefu wa Ajira'}
                   </h2>
-                  <div className="quick-actions-grid">
-                    <button 
-                      onClick={() => setActiveSection('post-job')}
-                      className="btn btn-primary hover-lift"
-                      style={{ padding: '16px', justifyContent: 'center' }}
-                    >
-                      <i className="fas fa-plus"></i>
-                      <span>{currentLanguage === 'en' ? 'Post New Job' : 'Tanga Kazi Mpya'}</span>
-                    </button>
+                  
+                  <div style={{ lineHeight: '1.8', fontSize: '16px', color: '#555' }}>
+                    <p style={{ marginBottom: '20px' }}>
+                      {currentLanguage === 'en' 
+                        ? 'As an employer on Kazi Mashinani, you play a crucial role in addressing unemployment in our communities. By posting job opportunities, you\'re not just filling positions - you\'re transforming lives and strengthening local economies.'
+                        : 'Kama mwajiri kwenye Kazi Mashinani, unacheza jukumu muhimu katika kushughulikia ukosefu wa ajira katika jamii zetu. Kwa kutangaza fursa za kazi, wewe si tu unajaza nafasi - unabadilisha maisha na kuimarisha uchumi wa ndani.'
+                      }
+                    </p>
+
+                    <h3 style={{ color: '#0066cc', margin: '25px 0 15px 0' }}>
+                      {currentLanguage === 'en' ? 'How You Can Make an Impact:' : 'Jinsi Unaweza Kufanya Mabadiliko:'}
+                    </h3>
                     
-                    <button 
-                      onClick={() => setActiveSection('applications')}
-                      className="btn btn-primary hover-lift"
-                      style={{ padding: '16px', justifyContent: 'center' }}
-                    >
-                      <i className="fas fa-file-alt"></i>
-                      <span>{currentLanguage === 'en' ? 'View Applications' : 'Angalia Maombi'}</span>
-                    </button>
-                    
-                    <button 
-                      onClick={() => setActiveSection('my-jobs')}
-                      className="btn btn-primary hover-lift"
-                      style={{ padding: '16px', justifyContent: 'center' }}
-                    >
-                      <i className="fas fa-briefcase"></i>
-                      <span>{currentLanguage === 'en' ? 'My Jobs' : 'Kazi Zangu'}</span>
-                    </button>
-                    
-                    <button 
-                      onClick={() => setActiveSection('profile')}
-                      className="btn btn-primary hover-lift"
-                      style={{ padding: '16px', justifyContent: 'center' }}
-                    >
-                      <i className="fas fa-cog"></i>
-                      <span>{currentLanguage === 'en' ? 'Settings' : 'Mipangilio'}</span>
-                    </button>
+                    <div style={{ display: 'grid', gap: '20px' }}>
+                      <div style={{ padding: '20px', background: '#f0f8ff', borderRadius: '10px', borderLeft: '4px solid #0066cc' }}>
+                        <h4 style={{ color: '#0066cc', margin: '0 0 10px 0' }}>
+                          <i className="fas fa-users" style={{ marginRight: '10px' }}></i>
+                          {currentLanguage === 'en' ? 'Create Local Opportunities' : 'Unda Fursa za Ndani'}
+                        </h4>
+                        <p style={{ margin: 0 }}>
+                          {currentLanguage === 'en' 
+                            ? 'Hire from within your community to keep wealth circulating locally and build stronger community ties.'
+                            : 'Ajiri kutoka ndani ya jamii yako ili kuweka utajirizunguka ndani na kujenga uhusiano dhabiti wa kijamii.'
+                          }
+                        </p>
+                      </div>
+
+                      <div style={{ padding: '20px', background: '#f0fff0', borderRadius: '10px', borderLeft: '4px solid #009900' }}>
+                        <h4 style={{ color: '#009900', margin: '0 0 10px 0' }}>
+                          <i className="fas fa-graduation-cap" style={{ marginRight: '10px' }}></i>
+                          {currentLanguage === 'en' ? 'Provide Skills Training' : 'Toa Mafunzo ya Ujuzi'}
+                        </h4>
+                        <p style={{ margin: 0 }}>
+                          {currentLanguage === 'en' 
+                            ? 'Consider offering on-the-job training for entry-level positions to help develop local talent.'
+                            : 'Fikiria kutoa mafunzo ya kazini kwa nafasi za kuanzia ili kusaidia kuendeleza talanta za ndani.'
+                          }
+                        </p>
+                      </div>
+
+                      <div style={{ padding: '20px', background: '#fff8f0', borderRadius: '10px', borderLeft: '4px solid #ff6600' }}>
+                        <h4 style={{ color: '#ff6600', margin: '0 0 10px 0' }}>
+                          <i className="fas fa-heart" style={{ marginRight: '10px' }}></i>
+                          {currentLanguage === 'en' ? 'Support Economic Growth' : 'Tekeleza Ukuaji wa Kiuchumi'}
+                        </h4>
+                        <p style={{ margin: 0 }}>
+                          {currentLanguage === 'en' 
+                            ? 'Every job you create supports multiple families and contributes to the overall economic development of rural areas.'
+                            : 'Kila kazi unayounda inasaidia familia nyingi na inachangia kukuza kwa uchumi wa maeneo ya vijijini.'
+                          }
+                        </p>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '30px', padding: '20px', background: '#e6f7ff', borderRadius: '10px', textAlign: 'center' }}>
+                      <h3 style={{ color: '#0066cc', marginBottom: '15px' }}>
+                        {currentLanguage === 'en' ? 'Ready to Make a Difference?' : 'Tayari Kufanya Mabadiliko?'}
+                      </h3>
+                      <p style={{ marginBottom: '20px' }}>
+                        {currentLanguage === 'en' 
+                          ? 'Start by posting your first job opportunity and become part of the solution to unemployment in rural communities.'
+                          : 'Anza kwa kutangaza fursa yako ya kwanza ya kazi na kuwa sehemu ya suluhisho la ukosefu wa ajira katika jamii za vijijini.'
+                        }
+                      </p>
+                      <button 
+                        onClick={() => setActiveSection('post-job')}
+                        className="btn btn-primary"
+                        style={{ padding: '12px 30px', fontSize: '16px' }}
+                      >
+                        <i className="fas fa-plus" style={{ marginRight: '8px' }}></i>
+                        {currentLanguage === 'en' ? 'Post a Job' : 'Tanga Kazi'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Post Job Section */}
+          {/* Post/Edit Job Section */}
           {activeSection === 'post-job' && (
             <div className="card page-transition">
               <div className="card-body">
                 <h2 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
                   <i className="fas fa-plus-circle" style={{ color: '#2ecc71' }}></i>
-                  {currentLanguage === 'en' ? 'Post New Job' : 'Tanga Kazi Mpya'}
+                  {editJob 
+                    ? (currentLanguage === 'en' ? 'Edit Job' : 'Hariri Kazi')
+                    : (currentLanguage === 'en' ? 'Post New Job' : 'Tanga Kazi Mpya')
+                  }
                 </h2>
 
-                <form onSubmit={handleJobSubmit} className="job-form">
+                <form onSubmit={editJob ? handleUpdateJob : handleJobSubmit} className="job-form">
                   <div className="form-group">
                     <label className="form-label">
-                      {currentLanguage === 'en' ? 'Job Title' : 'Kichwa cha Kazi'}
+                      {currentLanguage === 'en' ? 'Job Title' : 'Kichwa cha Kazi'} *
                     </label>
                     <input
                       type="text"
@@ -405,7 +464,7 @@ export default function EmployerPage() {
 
                   <div className="form-group">
                     <label className="form-label">
-                      {currentLanguage === 'en' ? 'Job Description' : 'Maelezo ya Kazi'}
+                      {currentLanguage === 'en' ? 'Job Description' : 'Maelezo ya Kazi'} *
                     </label>
                     <textarea
                       value={jobForm.description}
@@ -420,7 +479,7 @@ export default function EmployerPage() {
                   <div className="form-row">
                     <div className="form-group">
                       <label className="form-label">
-                        {currentLanguage === 'en' ? 'Location' : 'Eneo'}
+                        {currentLanguage === 'en' ? 'Location' : 'Eneo'} *
                       </label>
                       <input
                         type="text"
@@ -434,23 +493,7 @@ export default function EmployerPage() {
 
                     <div className="form-group">
                       <label className="form-label">
-                        {currentLanguage === 'en' ? 'Business Type' : 'Aina ya Biashara'}
-                      </label>
-                      <input
-                        type="text"
-                        value={jobForm.businessType}
-                        onChange={(e) => setJobForm(prev => ({ ...prev, businessType: e.target.value }))}
-                        className="form-control"
-                        placeholder={currentLanguage === 'en' ? 'e.g. Farm, Construction Company' : 'K.m. Shamba, Kampuni ya Ujenzi'}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label className="form-label">
-                        {currentLanguage === 'en' ? 'Category' : 'Aina ya Kazi'}
+                        {currentLanguage === 'en' ? 'Category' : 'Aina ya Kazi'} *
                       </label>
                       <select
                         value={jobForm.category}
@@ -465,54 +508,11 @@ export default function EmployerPage() {
                         <option value="huduma">{currentLanguage === 'en' ? 'Services' : 'Huduma'}</option>
                       </select>
                     </div>
-
-                    <div className="form-group">
-                      <label className="form-label">
-                        {currentLanguage === 'en' ? 'Salary' : 'Mshahara'}
-                      </label>
-                      <input
-                        type="text"
-                        value={jobForm.salary}
-                        onChange={(e) => setJobForm(prev => ({ ...prev, salary: e.target.value }))}
-                        className="form-control"
-                        placeholder={currentLanguage === 'en' ? 'e.g. 15,000 KES/month' : 'K.m. 15,000 TZS/mwezi'}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label className="form-label">
-                        {currentLanguage === 'en' ? 'Experience Required' : 'Uzoefu Unahitajika'}
-                      </label>
-                      <input
-                        type="text"
-                        value={jobForm.experience}
-                        onChange={(e) => setJobForm(prev => ({ ...prev, experience: e.target.value }))}
-                        className="form-control"
-                        placeholder={currentLanguage === 'en' ? 'e.g. 2+ years' : 'K.m. Miaka 2+'}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">
-                        {currentLanguage === 'en' ? 'Contact Phone' : 'Nambari ya Mawasiliano'}
-                      </label>
-                      <input
-                        type="tel"
-                        value={jobForm.phone}
-                        onChange={(e) => setJobForm(prev => ({ ...prev, phone: e.target.value }))}
-                        className="form-control"
-                        placeholder="07XXXXXXXX"
-                        required
-                      />
-                    </div>
                   </div>
 
                   <div className="form-group">
                     <label className="form-label">
-                      {currentLanguage === 'en' ? 'Required Skills (comma separated)' : 'Ujuzi Unahitajika (tenganisha kwa koma)'}
+                      {currentLanguage === 'en' ? 'Required Skills (optional)' : 'Ujuzi Unahitajika (si lazima)'}
                     </label>
                     <input
                       type="text"
@@ -523,10 +523,49 @@ export default function EmployerPage() {
                     />
                   </div>
 
-                  <button type="submit" className="btn btn-primary btn-block hover-lift">
-                    <i className="fas fa-paper-plane"></i>
-                    {currentLanguage === 'en' ? 'Post Job' : 'Tanga Kazi'}
-                  </button>
+                  <div className="form-group">
+                    <label className="form-label">
+                      {currentLanguage === 'en' ? 'Contact Phone' : 'Nambari ya Mawasiliano'} *
+                    </label>
+                    <input
+                      type="tel"
+                      value={jobForm.phone}
+                      onChange={(e) => setJobForm(prev => ({ ...prev, phone: e.target.value }))}
+                      className="form-control"
+                      placeholder="07XXXXXXXX"
+                      required
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                      <i className="fas fa-paper-plane"></i>
+                      {editJob 
+                        ? (currentLanguage === 'en' ? 'Update Job' : 'Sasisha Kazi')
+                        : (currentLanguage === 'en' ? 'Post Job' : 'Tanga Kazi')
+                      }
+                    </button>
+                    {editJob && (
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setEditJob(null)
+                          setJobForm({
+                            title: '',
+                            description: '',
+                            location: '',
+                            category: 'kilimo',
+                            skills: '',
+                            phone: user.phone || ''
+                          })
+                        }}
+                        className="btn btn-danger"
+                      >
+                        <i className="fas fa-times"></i>
+                        {currentLanguage === 'en' ? 'Cancel' : 'Ghairi'}
+                      </button>
+                    )}
+                  </div>
                 </form>
               </div>
             </div>
@@ -566,12 +605,8 @@ export default function EmployerPage() {
                             <span>{job.location}</span>
                           </div>
                           <div className="job-detail">
-                            <i className="fas fa-building"></i>
-                            <span>{job.businessType}</span>
-                          </div>
-                          <div className="job-detail">
-                            <i className="fas fa-money-bill"></i>
-                            <span>{job.salary}</span>
+                            <i className="fas fa-phone"></i>
+                            <span>{job.phone}</span>
                           </div>
                         </div>
 
@@ -589,11 +624,17 @@ export default function EmployerPage() {
                           {currentLanguage === 'en' ? 'Posted:' : 'Iliyotangazwa:'} {new Date(job.postedDate).toLocaleDateString('sw-TZ')}
                         </div>
                         <div className="job-actions">
-                          <button className="btn btn-primary btn-sm hover-lift">
-                            <i className="fas fa-eye"></i>
-                            {currentLanguage === 'en' ? 'View' : 'Angalia'}
+                          <button 
+                            onClick={() => shareJob(job)}
+                            className="btn btn-primary btn-sm hover-lift"
+                          >
+                            <i className="fas fa-share"></i>
+                            {currentLanguage === 'en' ? 'Share' : 'Shiriki'}
                           </button>
-                          <button className="btn btn-warning btn-sm hover-lift">
+                          <button 
+                            onClick={() => handleEditJob(job)}
+                            className="btn btn-warning btn-sm hover-lift"
+                          >
                             <i className="fas fa-edit"></i>
                             {currentLanguage === 'en' ? 'Edit' : 'Hariri'}
                           </button>
@@ -645,7 +686,9 @@ export default function EmployerPage() {
                         </div>
                         <div className="application-status">
                           <span className={`status-badge status-${application.status}`}>
-                            {application.status}
+                            {application.status === 'pending' ? (currentLanguage === 'en' ? 'Pending' : 'Inasubiri') :
+                             application.status === 'accepted' ? (currentLanguage === 'en' ? 'Accepted' : 'Imekubaliwa') :
+                             (currentLanguage === 'en' ? 'Rejected' : 'Imekataliwa')}
                           </span>
                         </div>
                       </div>
@@ -683,13 +726,13 @@ export default function EmployerPage() {
                           <i className="fas fa-times"></i>
                           {currentLanguage === 'en' ? 'Reject' : 'Kataa'}
                         </button>
-                        {application.applicantPhone && (
+                        {application.applicantPhone && application.applicantPhone !== 'N/A' && (
                           <a 
                             href={`tel:${application.applicantPhone}`}
                             className="btn btn-primary btn-sm hover-lift"
                           >
                             <i className="fas fa-phone"></i>
-                            <span>{currentLanguage === 'en' ? 'Call' : 'Piga Simu'}</span>
+                            {currentLanguage === 'en' ? 'Call' : 'Piga Simu'}
                           </a>
                         )}
                       </div>
@@ -730,67 +773,68 @@ export default function EmployerPage() {
                 <div className="profile-content">
                   <div className="profile-section">
                     <h3 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                      <i className="fas fa-user-circle" style={{ color: '#3498db' }}></i>
-                      {currentLanguage === 'en' ? 'Personal Information' : 'Taarifa Binafsi'}
+                      <i className="fas fa-user-edit" style={{ color: '#3498db' }}></i>
+                      {currentLanguage === 'en' ? 'Edit Profile' : 'Hariri Wasifu'}
                     </h3>
                     
-                    <div className="info-grid">
-                      <div className="info-item">
-                        <label>{currentLanguage === 'en' ? 'Full Name' : 'Jina Kamili'}</label>
-                        <p>{user.name}</p>
+                    <form onSubmit={handleUpdateProfile}>
+                      <div className="form-group">
+                        <label className="form-label">
+                          {currentLanguage === 'en' ? 'Full Name' : 'Jina Kamili'} *
+                        </label>
+                        <input
+                          type="text"
+                          value={editProfile.name}
+                          onChange={(e) => setEditProfile(prev => ({ ...prev, name: e.target.value }))}
+                          className="form-control"
+                          required
+                        />
                       </div>
                       
-                      <div className="info-item">
-                        <label>{currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'}</label>
-                        <p>{user.phone}</p>
+                      <div className="form-group">
+                        <label className="form-label">
+                          {currentLanguage === 'en' ? 'Phone Number' : 'Nambari ya Simu'} *
+                        </label>
+                        <input
+                          type="tel"
+                          value={editProfile.phone}
+                          onChange={(e) => setEditProfile(prev => ({ ...prev, phone: e.target.value }))}
+                          className="form-control"
+                          required
+                        />
                       </div>
                       
-                      <div className="info-item">
-                        <label>{currentLanguage === 'en' ? 'Location' : 'Eneo'}</label>
-                        <p>{user.location}</p>
+                      <div className="form-group">
+                        <label className="form-label">
+                          {currentLanguage === 'en' ? 'Location' : 'Eneo'} *
+                        </label>
+                        <input
+                          type="text"
+                          value={editProfile.location}
+                          onChange={(e) => setEditProfile(prev => ({ ...prev, location: e.target.value }))}
+                          className="form-control"
+                          required
+                        />
                       </div>
-                      
-                      <div className="info-item">
-                        <label>{currentLanguage === 'en' ? 'Role' : 'Jukumu'}</label>
-                        <p>{currentLanguage === 'en' ? 'Employer' : 'Mwajiri'}</p>
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="profile-section">
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                      <i className="fas fa-cog" style={{ color: '#95a5a6' }}></i>
-                      {currentLanguage === 'en' ? 'Next Steps' : 'Hatua Zifuatazo'}
-                    </h3>
-                    
-                    <div className="action-buttons">
-                      <button 
-                        onClick={handleEditProfile}
-                        className="btn btn-primary hover-lift"
-                        style={{ justifyContent: 'flex-start' }}
-                      >
-                        <i className="fas fa-edit"></i>
-                        <span>{currentLanguage === 'en' ? 'Edit Profile' : 'Hariri Wasifu'}</span>
+                      <div className="form-group">
+                        <label className="form-label">
+                          {currentLanguage === 'en' ? 'Business Name' : 'Jina la Biashara'}
+                        </label>
+                        <input
+                          type="text"
+                          value={editProfile.businessName}
+                          onChange={(e) => setEditProfile(prev => ({ ...prev, businessName: e.target.value }))}
+                          className="form-control"
+                          placeholder={currentLanguage === 'en' ? 'Your business name' : 'Jina la biashara yako'}
+                        />
+                      </div>
+
+                      <button type="submit" className="btn btn-primary btn-block">
+                        <i className="fas fa-save"></i>
+                        {currentLanguage === 'en' ? 'Save Changes' : 'Hifadhi Mabadiliko'}
                       </button>
-                      
-                      <button 
-                        onClick={handleNotificationSettings}
-                        className="btn btn-primary hover-lift"
-                        style={{ justifyContent: 'flex-start' }}
-                      >
-                        <i className="fas fa-bell"></i>
-                        <span>{currentLanguage === 'en' ? 'Notification Settings' : 'Mipangilio ya Arifa'}</span>
-                      </button>
-                      
-                      <button 
-                        onClick={handleAccountSecurity}
-                        className="btn btn-primary hover-lift"
-                        style={{ justifyContent: 'flex-start' }}
-                      >
-                        <i className="fas fa-shield-alt"></i>
-                        <span>{currentLanguage === 'en' ? 'Account Security' : 'Usalama wa Akaunti'}</span>
-                      </button>
-                    </div>
+                    </form>
                   </div>
                 </div>
               </div>
