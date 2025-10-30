@@ -18,6 +18,7 @@ export default function DashboardPage() {
     phone: '',
     location: ''
   })
+  const [sideNavOpen, setSideNavOpen] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -168,6 +169,14 @@ export default function DashboardPage() {
     }
   }
 
+  const openSideNav = () => {
+    setSideNavOpen(true)
+  }
+
+  const closeSideNav = () => {
+    setSideNavOpen(false)
+  }
+
   if (!mounted || loading) {
     return (
       <div className="loading">
@@ -192,6 +201,7 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard">
+      {/* Header */}
       <header className="header">
         <div className="container">
           <div className="header-content">
@@ -203,80 +213,73 @@ export default function DashboardPage() {
             <div className="user-menu">
               <button
                 onClick={toggleLanguage}
-                className="language-switcher-btn"
-                style={{ 
-                  background: 'transparent', 
-                  border: 'none', 
-                  padding: '8px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  color: '#333'
-                }}
+                className="google-translate"
               >
-                {currentLanguage === 'en' ? '🇺🇸 EN' : '🇰🇪 SW'}
+                {currentLanguage === 'en' ? '🇺🇸 English' : '🇰🇪 Kiswahili'}
               </button>
               
-              <div className="user-info">
-                <div className="user-avatar">
-                  {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: '600' }}>{user?.name}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#666' }}>
-                    {userRole === 'employee' ? (currentLanguage === 'en' ? 'Job Seeker' : 'Mtafuta Kazi') : (currentLanguage === 'en' ? 'Employer' : 'Mwajiri')}
-                  </div>
-                </div>
-              </div>
-              
               <button 
-                onClick={logout}
-                className="btn"
-                style={{ 
-                  background: '#e74c3c', 
-                  color: 'white',
-                  padding: '8px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
+                className="menu-button"
+                onClick={openSideNav}
               >
-                <i className="fas fa-sign-out-alt"></i>
-                <span>{currentLanguage === 'en' ? 'Logout' : 'Toka'}</span>
+                <i className="fas fa-bars"></i>
               </button>
             </div>
           </div>
         </div>
       </header>
 
-      <nav className="nav">
-        <div className="container">
-          <div className="nav-content">
-            {['home', 'jobs', 'favorites', 'applications', 'profile'].map(section => (
-              <div
-                key={section}
-                className={`nav-item ${activeSection === section ? 'active' : ''}`}
-                onClick={() => setActiveSection(section)}
-              >
-                <i className={`fas ${
-                  section === 'home' ? 'fa-home' :
-                  section === 'jobs' ? 'fa-briefcase' :
-                  section === 'favorites' ? 'fa-heart' :
-                  section === 'applications' ? 'fa-file-alt' :
-                  'fa-user'
-                }`}></i>
-                <span>
-                  {section === 'home' && (currentLanguage === 'en' ? 'Home' : 'Nyumbani')}
-                  {section === 'jobs' && (currentLanguage === 'en' ? 'Jobs' : 'Kazi')}
-                  {section === 'favorites' && (currentLanguage === 'en' ? 'Favorites' : 'Vipendwa')}
-                  {section === 'applications' && (currentLanguage === 'en' ? 'Applications' : 'Maombi')}
-                  {section === 'profile' && (currentLanguage === 'en' ? 'Profile' : 'Wasifu')}
-                </span>
-              </div>
-            ))}
-          </div>
+      {/* Side Navigation */}
+      <div className={`overlay ${sideNavOpen ? 'show' : ''}`} onClick={closeSideNav}></div>
+      
+      <div className={`side-nav ${sideNavOpen ? 'open' : ''}`}>
+        <div className="side-nav-header">
+          <h2 className="side-nav-title">Quick Links</h2>
+          <button className="side-nav-close" onClick={closeSideNav}>
+            <i className="fas fa-times"></i>
+          </button>
         </div>
-      </nav>
+        
+        <div className="side-nav-content">
+          <a 
+            href="/blog" 
+            className="side-nav-item"
+            onClick={closeSideNav}
+          >
+            <i className="fas fa-info-circle"></i>
+            <span>About Kazi Mashinani</span>
+          </a>
+          
+          <a 
+            href="tel:+254790528837" 
+            className="side-nav-item"
+            onClick={closeSideNav}
+          >
+            <i className="fas fa-phone"></i>
+            <span>Call Us: +254790528837</span>
+          </a>
+          
+          <a 
+            href="mailto:myhassan19036@gmail.com" 
+            className="side-nav-item"
+            onClick={closeSideNav}
+          >
+            <i className="fas fa-envelope"></i>
+            <span>Email: myhassan19036@gmail.com</span>
+          </a>
 
+          <button 
+            onClick={logout}
+            className="side-nav-item"
+            style={{ background: '#e74c3c', color: 'white', border: 'none' }}
+          >
+            <i className="fas fa-sign-out-alt"></i>
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
       <main className="main-content">
         <div className="container">
           {/* Home Section with Blog */}
@@ -713,6 +716,35 @@ export default function DashboardPage() {
           )}
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="footer">
+        <div className="footer-content">
+          <p>Kazi Mashinani &copy; 2025. {currentLanguage === 'en' ? 'All rights reserved.' : 'Haki zote zimehifadhiwa.'}</p>
+        </div>
+      </footer>
+
+      {/* Bottom Navigation */}
+      <nav className="bottom-nav">
+        <div className="bottom-nav-content">
+          {[
+            { id: 'home', icon: 'fa-home', en: 'Home', sw: 'Nyumbani' },
+            { id: 'jobs', icon: 'fa-briefcase', en: 'Jobs', sw: 'Kazi' },
+            { id: 'favorites', icon: 'fa-heart', en: 'Favorites', sw: 'Vipendwa' },
+            { id: 'applications', icon: 'fa-file-alt', en: 'Applications', sw: 'Maombi' },
+            { id: 'profile', icon: 'fa-user', en: 'Profile', sw: 'Wasifu' }
+          ].map(section => (
+            <div
+              key={section.id}
+              className={`bottom-nav-item ${activeSection === section.id ? 'active' : ''}`}
+              onClick={() => setActiveSection(section.id)}
+            >
+              <i className={`fas ${section.icon}`}></i>
+              <span>{currentLanguage === 'en' ? section.en : section.sw}</span>
+            </div>
+          ))}
+        </div>
+      </nav>
     </div>
   )
 }
